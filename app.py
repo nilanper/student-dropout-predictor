@@ -228,14 +228,16 @@ def save_prediction_results(df: pd.DataFrame) -> str:
     return path
 
 
-def save_shap_plot(explanation, max_display: int = 15) -> str:
+def save_shap_plot(explanation, max_display: int = 12) -> str:
     plt.close("all")
     shap.plots.waterfall(explanation, max_display=max_display, show=False)
     fig = plt.gcf()
     fig.set_size_inches(12, 8)
     path = os.path.join(tempfile.gettempdir(), "student_shap_waterfall.png")
-    plt.tight_layout()
-    fig.savefig(path, dpi=200, bbox_inches="tight")
+
+    # Avoid bbox_inches='tight' here because SHAP labels can occasionally
+    # create extremely large bounding boxes in cloud environments.
+    fig.savefig(path, dpi=160)
     plt.close(fig)
     return path
 
@@ -271,11 +273,13 @@ def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_na
 
     row_data = X_row_transformed[0] if np.ndim(X_row_transformed) > 1 else X_row_transformed
 
+        safe_feature_names = [str(name)[:60] for name in feature_names]
+
     return shap.Explanation(
         values=values_1d,
         base_values=base_value,
         data=row_data,
-        feature_names=feature_names,
+        feature_names=safe_feature_names,
     )
 
 
@@ -499,7 +503,7 @@ with train_tab:
                     step=0.05,
                 )
 
-                if st.button("🚀 Train Model", use_container_width=True):
+                if st.button("🚀 Train Model", width="stretch"):
                     train_institution_model(
                         training_df_preview,
                         target_column,
@@ -517,7 +521,7 @@ with train_tab:
     with col2:
         st.markdown("### Validation Metrics")
         if st.session_state.train_metrics is not None:
-            st.dataframe(generate_metrics_table(st.session_state.train_metrics), use_container_width=True)
+            st.dataframe(generate_metrics_table(st.session_state.train_metrics), width="stretch")
         else:
             st.info("Validation metrics will appear here after model training.")
 
@@ -539,9 +543,9 @@ with predict_tab:
 
             button_col1, button_col2 = st.columns(2)
             with button_col1:
-                submit_prediction = st.button("Submit File", use_container_width=True)
+                submit_prediction = st.button("Submit File", width="stretch")
             with button_col2:
-                clear_prediction = st.button("Clear", use_container_width=True)
+                clear_prediction = st.button("Clear", width="stretch")
 
             if clear_prediction:
                 reset_prediction_state()
@@ -568,7 +572,7 @@ with predict_tab:
                         data=f,
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         with pred_col2:
@@ -591,7 +595,7 @@ with predict_tab:
                     st.session_state.predict_df[preview_cols].copy()
                     if preview_cols else st.session_state.predict_df.copy()
                 )
-                st.dataframe(preview_df, use_container_width=True, height=280)
+                st.dataframe(preview_df, width="stretch", height=280)
             else:
                 st.info("Prediction results will appear here after you upload a file and click Submit File.")
 
@@ -613,8 +617,8 @@ with predict_tab:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
                 selected_student_id = typed_student_id
 
-            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True)
-            clear_shap_clicked = st.button("Clear SHAP Section", use_container_width=True)
+            explain_clicked = st.button("🔎 Explain Prediction", width="stretch")
+            clear_shap_clicked = st.button("Clear SHAP Section", width="stretch")
 
             if clear_shap_clicked:
                 st.session_state.latest_plot = None
@@ -642,11 +646,11 @@ with predict_tab:
                         data=f,
                         file_name="student_shap_waterfall.png",
                         mime="image/png",
-                        use_container_width=True,
+                        width="stretch",
                     )
 
         with shap_col2:
             if st.session_state.latest_plot and os.path.exists(st.session_state.latest_plot):
-                st.image(st.session_state.latest_plot, caption="SHAP Waterfall Plot", use_container_width=True)
+                st.image(st.session_state.latest_plot, caption="SHAP Waterfall Plot", width="stretch")
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
