@@ -227,7 +227,6 @@ def save_prediction_results(df: pd.DataFrame) -> str:
     df.to_csv(path, index=False)
     return path
 
-
 def save_shap_plot(explanation, max_display: int = 12) -> str:
     plt.close("all")
     shap.plots.waterfall(explanation, max_display=max_display, show=False)
@@ -235,8 +234,6 @@ def save_shap_plot(explanation, max_display: int = 12) -> str:
     fig.set_size_inches(12, 8)
     path = os.path.join(tempfile.gettempdir(), "student_shap_waterfall.png")
 
-    # Avoid bbox_inches='tight' here because SHAP labels can occasionally
-    # create extremely large bounding boxes in cloud environments.
     fig.savefig(path, dpi=160)
     plt.close(fig)
     return path
@@ -273,7 +270,8 @@ def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_na
 
     row_data = X_row_transformed[0] if np.ndim(X_row_transformed) > 1 else X_row_transformed
 
-        safe_feature_names = [str(name)[:60] for name in feature_names]
+    # FIXED indentation here
+    safe_feature_names = [str(name)[:60] for name in feature_names]
 
     return shap.Explanation(
         values=values_1d,
