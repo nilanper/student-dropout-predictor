@@ -57,7 +57,6 @@ def init_state():
         "train_success_message": "",
         "prediction_status": "",
         "explain_status": "",
-        "is_training": False,
         "last_training_file_name": None,
         "last_prediction_file_name": None,
     }
@@ -103,9 +102,7 @@ def reset_training_state():
     st.session_state.global_summary_plot_bytes = None
     st.session_state.is_trained = False
     st.session_state.train_success_message = ""
-    st.session_state.is_training = False
     reset_prediction_state()
-
 
 
 def reset_prediction_state():
@@ -113,11 +110,8 @@ def reset_prediction_state():
     st.session_state.prediction_file = None
     st.session_state.latest_explanation = None
     st.session_state.latest_plot_bytes = None
-    st.session_state.global_importance_plot_bytes = None
-    st.session_state.global_summary_plot_bytes = None
     st.session_state.prediction_status = ""
     st.session_state.explain_status = ""
-
 
 
 def clear_status_messages_on_new_upload(training_file, prediction_file):
@@ -131,6 +125,8 @@ def clear_status_messages_on_new_upload(training_file, prediction_file):
     if current_prediction_name != st.session_state.last_prediction_file_name:
         st.session_state.prediction_status = ""
         st.session_state.explain_status = ""
+        st.session_state.latest_explanation = None
+        st.session_state.latest_plot_bytes = None
         st.session_state.last_prediction_file_name = current_prediction_name
 
 
@@ -138,7 +134,6 @@ def get_model_status_text() -> str:
     if st.session_state.is_trained:
         return "✅ Model status: Trained successfully. Tab 2 is ready for prediction and SHAP explanations."
     return "⚠️ Model status: Not trained yet. Please complete Tab 1 before using Tab 2."
-
 
 
 def normalize_binary_target(series: pd.Series) -> pd.Series:
@@ -186,7 +181,6 @@ def normalize_binary_target(series: pd.Series) -> pd.Series:
     return pd.Series(mapped, index=s.index, dtype=int)
 
 
-
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
     categorical_cols = [c for c in X.columns if c not in numeric_cols]
@@ -212,7 +206,6 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     ])
 
 
-
 def get_transformed_feature_names(preprocessor: ColumnTransformer) -> List[str]:
     try:
         return list(preprocessor.get_feature_names_out())
@@ -230,7 +223,6 @@ def get_transformed_feature_names(preprocessor: ColumnTransformer) -> List[str]:
             else:
                 feature_names.extend(list(columns))
         return feature_names
-
 
 
 def infer_id_and_name_columns(df: pd.DataFrame) -> Tuple[str, str]:
@@ -251,14 +243,12 @@ def infer_id_and_name_columns(df: pd.DataFrame) -> Tuple[str, str]:
     return candidate_id, candidate_name
 
 
-
 def guess_target_column(columns: List[str]) -> str:
     lowered_map = {c.lower(): c for c in columns}
     for guess in ["target", "dropout", "status", "label"]:
         if guess in lowered_map:
             return lowered_map[guess]
     return columns[0] if columns else None
-
 
 
 def validate_prediction_columns(df: pd.DataFrame, required_columns: List[str]) -> Tuple[bool, str]:
@@ -268,7 +258,6 @@ def validate_prediction_columns(df: pd.DataFrame, required_columns: List[str]) -
     return True, ""
 
 
-
 def generate_metrics_table(metrics: dict) -> pd.DataFrame:
     return pd.DataFrame({
         "Metric": list(metrics.keys()),
@@ -276,12 +265,22 @@ def generate_metrics_table(metrics: dict) -> pd.DataFrame:
     })
 
 
-
 def save_prediction_results(df: pd.DataFrame) -> str:
     path = os.path.join(tempfile.gettempdir(), "student_dropout_predictions.csv")
     df.to_csv(path, index=False)
     return path
 
+
+def clean_feature_names(feature_names: List[str]) -> List[str]:
+    cleaned = []
+    for name in feature_names:
+        label = str(name)
+        label = label.replace("num__", "")
+        label = label.replace("cat__", "")
+        label = label.replace("_", " ")
+        label = label[:70]
+        cleaned.append(label)
+    return cleaned
 
 
 def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_names: List[str]):
@@ -315,22 +314,12 @@ def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_na
 
     row_data = X_row_transformed[0] if np.ndim(X_row_transformed) > 1 else X_row_transformed
 
-    cleaned_feature_names = []
-    for name in feature_names:
-        label = str(name)
-        label = label.replace("num__", "")
-        label = label.replace("cat__", "")
-        label = label.replace("_", " ")
-        label = label[:70]
-        cleaned_feature_names.append(label)
-
     return shap.Explanation(
         values=values_1d,
         base_values=base_value,
         data=row_data,
-        feature_names=cleaned_feature_names,
+        feature_names=clean_feature_names(feature_names),
     )
-
 
 
 def build_shap_figure(explanation, max_display: int = 10):
@@ -343,18 +332,17 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(14, 10 + max_len * 0.12), 22)
-    fig_height = max(7, 0.58 * max_display + 2.5)
+    fig_width = min(max(13, 9 + max_len * 0.08), 18)
+    fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
 
-    left_margin = min(max(0.32, max_len * 0.010), 0.58)
+    left_margin = min(max(0.30, max_len * 0.008), 0.50)
     fig.subplots_adjust(left=left_margin, right=0.98, top=0.92, bottom=0.14)
 
     ax.tick_params(axis="y", labelsize=10)
     ax.tick_params(axis="x", labelsize=10)
 
     return fig
-
 
 
 def figure_to_png_bytes(fig) -> bytes:
@@ -387,19 +375,11 @@ def extract_positive_class_shap_values(shap_values) -> np.ndarray:
 
 
 def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List[str]):
-    cleaned_feature_names = []
-    for name in feature_names:
-        label = str(name)
-        label = label.replace("num__", "")
-        label = label.replace("cat__", "")
-        label = label.replace("_", " ")
-        label = label[:70]
-        cleaned_feature_names.append(label)
+    cleaned_feature_names = clean_feature_names(feature_names)
 
     shap_values_obj = explainer(X_sample)
     shap_values = extract_positive_class_shap_values(shap_values_obj)
 
-    # Global feature importance bar plot
     plt.close("all")
     plt.figure(figsize=(11, 7))
     shap.summary_plot(
@@ -414,7 +394,6 @@ def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List
     importance_bytes = figure_to_png_bytes(fig_bar)
     plt.close(fig_bar)
 
-    # Global SHAP summary plot
     plt.close("all")
     plt.figure(figsize=(11, 7))
     shap.summary_plot(
@@ -431,7 +410,6 @@ def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List
     return importance_bytes, summary_bytes
 
 
-
 def get_student_id_choices_from_predictions() -> List[str]:
     student_id_col = st.session_state.student_id_column
     if (
@@ -445,12 +423,15 @@ def get_student_id_choices_from_predictions() -> List[str]:
     return []
 
 
-
-def train_institution_model(df: pd.DataFrame, target_column: str, student_id_column: str, student_name_column: str, test_size: float):
-    st.session_state.is_training = True
-
+def train_institution_model(
+    df: pd.DataFrame,
+    target_column: str,
+    student_id_column: str,
+    student_name_column: str,
+    test_size: float,
+):
     if XGBClassifier is None:
-        raise RuntimeError("xgboost is not installed. Please add streamlit and xgboost to requirements.txt.")
+        raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
 
     reset_training_state()
     df = df.copy()
@@ -509,6 +490,20 @@ def train_institution_model(df: pd.DataFrame, target_column: str, student_id_col
         "ROC AUC": roc_auc_score(y_test, y_prob) if len(np.unique(y_test)) == 2 else np.nan,
     }
 
+    shap_explainer = shap.TreeExplainer(model)
+
+    sample_size = min(300, X_train_transformed.shape[0])
+    sample_idx = np.random.RandomState(42).choice(
+        X_train_transformed.shape[0], size=sample_size, replace=False
+    )
+    X_shap_sample = X_train_transformed[sample_idx]
+    feature_names = get_transformed_feature_names(preprocessor)
+    importance_bytes, summary_bytes = build_global_shap_plots(
+        shap_explainer,
+        X_shap_sample,
+        feature_names,
+    )
+
     st.session_state.model = model
     st.session_state.preprocessor = preprocessor
     st.session_state.feature_columns = X.columns.tolist()
@@ -516,28 +511,14 @@ def train_institution_model(df: pd.DataFrame, target_column: str, student_id_col
     st.session_state.student_id_column = student_id_column if student_id_column in df.columns else None
     st.session_state.student_name_column = student_name_column if student_name_column in df.columns else None
     st.session_state.train_metrics = metrics
-    st.session_state.shap_explainer = shap.TreeExplainer(model)
-
-    # Build global SHAP plots from a training sample
-    sample_size = min(300, X_train_transformed.shape[0])
-    sample_idx = np.random.RandomState(42).choice(X_train_transformed.shape[0], size=sample_size, replace=False)
-    X_shap_sample = X_train_transformed[sample_idx]
-    feature_names = get_transformed_feature_names(preprocessor)
-    importance_bytes, summary_bytes = build_global_shap_plots(
-        st.session_state.shap_explainer,
-        X_shap_sample,
-        feature_names,
-    )
+    st.session_state.shap_explainer = shap_explainer
     st.session_state.global_importance_plot_bytes = importance_bytes
     st.session_state.global_summary_plot_bytes = summary_bytes
-
     st.session_state.is_trained = True
     st.session_state.train_success_message = (
         f"✅ Model trained successfully on {len(df)} records with {X.shape[1]} feature columns. "
         "You can now use Tab 2 for prediction and SHAP explanations."
     )
-    st.session_state.is_training = False
-
 
 
 def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
@@ -567,13 +548,13 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
     return result_df
 
 
-
 def format_explain_status(student_id: str, pred_label: str, pred_prob: float) -> str:
     return (
         f"✅ SHAP explanation generated for Student ID {student_id}\n"
-        f"**Prediction:** {pred_label}\n"
-        f"**Dropout Probability:** {pred_prob:.4f}"
+        f"<b>Prediction:</b> {pred_label}\n"
+        f"<b>Dropout Probability:</b> {pred_prob:.4f}"
     )
+
 
 def explain_student(chosen_id: str):
     if not st.session_state.is_trained:
@@ -612,7 +593,6 @@ def explain_student(chosen_id: str):
 
     pred_label = row["Prediction"].iloc[0] if "Prediction" in row.columns else "Unknown"
     pred_prob = row["Dropout Probability"].iloc[0] if "Dropout Probability" in row.columns else np.nan
-
     st.session_state.explain_status = format_explain_status(chosen_id, pred_label, pred_prob)
 
 
@@ -681,19 +661,21 @@ with train_tab:
                 )
 
                 if st.button("🚀 Train Model", width="stretch"):
-                    train_institution_model(
-                        training_df_preview,
-                        target_column,
-                        None if student_id_column == "None" else student_id_column,
-                        None if student_name_column == "None" else student_name_column,
-                        test_size,
-                    )
+                    try:
+                        with st.spinner("Model training in progress..."):
+                            train_institution_model(
+                                training_df_preview,
+                                target_column,
+                                None if student_id_column == "None" else student_id_column,
+                                None if student_name_column == "None" else student_name_column,
+                                test_size,
+                            )
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Model training failed: {e}")
 
             except Exception as e:
                 st.error(f"Training file could not be read: {e}")
-
-        if st.session_state.is_training:
-            st.info("Model training in progress...")
 
         if st.session_state.train_success_message:
             st.success(st.session_state.train_success_message)
@@ -720,7 +702,7 @@ with train_tab:
                 else:
                     st.info("Summary plot will appear here after model training.")
         else:
-            st.info("Validation metrics and global SHAP plots will appear here after model training.")
+            st.info("Model performance metrics and global SHAP plots will appear here after model training.")
 
 with predict_tab:
     st.info(get_model_status_text())
@@ -834,8 +816,13 @@ with predict_tab:
 
             if st.session_state.explain_status:
                 if st.session_state.explain_status.startswith("✅"):
+                    formatted_html = st.session_state.explain_status.replace("\n", "<br>")
                     st.markdown(
-                        f"<div style='padding:0.75rem 1rem; border-radius:0.5rem; background:#d1fae5; color:#065f46; white-space:pre-line;'>{st.session_state.explain_status}</div>",
+                        f"""
+                        <div style="padding:0.75rem 1rem; border-radius:0.5rem; background:#d1fae5; color:#065f46;">
+                            {formatted_html}
+                        </div>
+                        """,
                         unsafe_allow_html=True,
                     )
                 else:
@@ -851,13 +838,11 @@ with predict_tab:
                 )
 
         with shap_col2:
-            if st.session_state.latest_explanation is not None:
+            if st.session_state.latest_plot_bytes is not None:
                 st.markdown('<div class="shap-plot-frame">', unsafe_allow_html=True)
                 plot_container = st.container(height=760, border=False)
                 with plot_container:
-                    fig = build_shap_figure(st.session_state.latest_explanation)
-                    st.pyplot(fig)
-                    plt.close(fig)
+                    st.image(st.session_state.latest_plot_bytes, width="stretch")
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
