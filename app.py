@@ -570,13 +570,10 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
 def format_explain_status(student_id: str, pred_label: str, pred_prob: float) -> str:
     return (
-        f"✅ SHAP explanation generated for Student ID {student_id}
-"
-        f"**Prediction:** {pred_label}  
-"
+        f"✅ SHAP explanation generated for Student ID {student_id}\n"
+        f"**Prediction:** {pred_label}\n"
         f"**Dropout Probability:** {pred_prob:.4f}"
     )
-
 
 def explain_student(chosen_id: str):
     if not st.session_state.is_trained:
