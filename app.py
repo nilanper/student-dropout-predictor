@@ -173,6 +173,12 @@ def get_model_status_text() -> str:
     return "⚠️ Model status: Not trained yet. Please complete model training in the first Tab before using this Tab"
 
 
+def format_probability(prob: float) -> str:
+    if pd.isna(prob):
+        return "N/A"
+    return f"{prob * 100:.2f}%"
+
+
 def normalize_binary_target(series: pd.Series) -> pd.Series:
     s = series.copy()
 
@@ -303,8 +309,11 @@ def generate_metrics_table(metrics: dict) -> pd.DataFrame:
 
 
 def save_prediction_results(df: pd.DataFrame) -> str:
+    export_df = df.copy()
+    if "Dropout Probability Value" in export_df.columns:
+        export_df = export_df.drop(columns=["Dropout Probability Value"])
     path = os.path.join(tempfile.gettempdir(), "student_dropout_predictions.csv")
-    df.to_csv(path, index=False)
+    export_df.to_csv(path, index=False)
     return path
 
 
@@ -392,49 +401,28 @@ def choose_best_model(results_df: pd.DataFrame, metric_name: str) -> str:
 
 
 def get_explainer_for_model(model, model_name, X_background):
-    if model_name in ["XGBoost", "Random Forest"]:
-        return shap.TreeExplainer(model)
-
-    if model_name == "Logistic Regression":
-        try:
-            return shap.LinearExplainer(model, X_background)
-        except Exception:
-            return shap.Explainer(model, X_background)
-
-    if model_name == "Neural Network":
-        background = X_background[: min(100, len(X_background))]
-        return shap.Explainer(model.predict_proba, background)
-
-    return shap.Explainer(model, X_background)
+    background = X_background[: min(100, len(X_background))]
+    return shap.Explainer(model.predict_proba, background)
 
 
 def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_names: List[str]):
     shap_values = explainer(X_row_transformed)
 
-    if hasattr(shap_values, "values"):
-        values = shap_values.values
-        base_values = shap_values.base_values
-    else:
-        values = np.array(shap_values)
-        base_values = 0.0
+    values = shap_values.values
+    base_values = shap_values.base_values
 
+    # Positive class probability (class 1)
     if np.ndim(values) == 3:
-        if values.shape[-1] == 2:
-            values_1d = values[0, :, 1]
-        else:
-            values_1d = values[0, :, 0]
+        values_1d = values[0, :, 1]
     elif np.ndim(values) == 2:
         values_1d = values[0]
     else:
         values_1d = values
 
     if np.ndim(base_values) == 2:
-        if base_values.shape[-1] == 2:
-            base_value = base_values[0, 1]
-        else:
-            base_value = base_values[0, 0]
+        base_value = base_values[0, 1]
     elif np.ndim(base_values) == 1:
-        if len(base_values) == 2:
+        if len(base_values) > 1:
             base_value = base_values[1]
         else:
             base_value = base_values[0]
@@ -485,32 +473,16 @@ def figure_to_png_bytes(fig) -> bytes:
     return buffer.getvalue()
 
 
-def extract_positive_class_shap_values(shap_values) -> np.ndarray:
-    values = shap_values.values if hasattr(shap_values, "values") else shap_values
-
-    if isinstance(values, list):
-        if len(values) >= 2:
-            return np.array(values[1])
-        return np.array(values[0])
-
-    values = np.array(values)
-    if values.ndim == 3:
-        if values.shape[-1] >= 2:
-            return values[:, :, 1]
-        return values[:, :, 0]
-    if values.ndim == 2:
-        return values
-    raise ValueError("Unexpected SHAP values shape for global plots.")
-
-
 def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List[str]):
     cleaned_feature_names = clean_feature_names(feature_names)
 
     shap_values_obj = explainer(X_sample)
-    if hasattr(shap_values_obj, "values"):
-        shap_values = extract_positive_class_shap_values(shap_values_obj)
+    values = shap_values_obj.values
+
+    if np.ndim(values) == 3:
+        shap_values = values[:, :, 1]
     else:
-        shap_values = np.array(shap_values_obj)
+        shap_values = values
 
     plt.close("all")
     plt.figure(figsize=(11, 7))
@@ -702,7 +674,8 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
     preds = (probs >= 0.5).astype(int)
 
     result_df = df.copy()
-    result_df["Dropout Probability"] = np.round(probs, 4)
+    result_df["Dropout Probability"] = [format_probability(p) for p in probs]
+    result_df["Dropout Probability Value"] = probs
     result_df["Prediction"] = np.where(preds == 1, "Dropout", "No Dropout")
 
     st.session_state.predict_df = result_df
@@ -716,7 +689,7 @@ def format_explain_status(student_id: str, pred_label: str, pred_prob: float) ->
     return (
         f"✅ SHAP explanation generated for Student ID {student_id}\n"
         f"<b>Prediction:</b> {pred_label}\n"
-        f"<b>Dropout Probability:</b> {pred_prob:.4f}"
+        f"<b>Dropout Probability:</b> {format_probability(pred_prob)}"
     )
 
 
@@ -756,7 +729,7 @@ def explain_student(chosen_id: str):
     st.session_state.latest_plot_bytes = plot_bytes
 
     pred_label = row["Prediction"].iloc[0] if "Prediction" in row.columns else "Unknown"
-    pred_prob = row["Dropout Probability"].iloc[0] if "Dropout Probability" in row.columns else np.nan
+    pred_prob = row["Dropout Probability Value"].iloc[0] if "Dropout Probability Value" in row.columns else np.nan
 
     st.session_state.explain_status = format_explain_status(chosen_id, pred_label, pred_prob)
 
@@ -766,7 +739,7 @@ def explain_student(chosen_id: str):
 # ============================================================
 st.title("🎓 Student Dropout Predictor with SHAP Explainer")
 st.write(
-    "Upload a CSV file containing student records to train an institution-specific XGBoost model, "
+    "Upload a CSV file containing student records to train an institution-specific model, "
     "then generate dropout predictions and SHAP-based explanations."
 )
 
@@ -936,40 +909,34 @@ with predict_tab:
     if not st.session_state.is_trained:
         st.warning("You need to complete model training in the first Tab 'Train Institution Model' before using this section")
     else:
+        if st.session_state.selected_model_name:
+            st.caption(f"Active model: {st.session_state.selected_model_name}")
+
         st.subheader("Upload & Predict")
         pred_col1, pred_col2 = st.columns([1, 2])
 
         with pred_col1:
             prediction_file = st.file_uploader(
-                "📄 Upload Student CSV File",
+                "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
             )
             clear_status_messages_on_new_upload(None, prediction_file)
 
-            button_col1, button_col2 = st.columns(2)
-            with button_col1:
-                submit_prediction = st.button("Submit File", width="stretch")
-            with button_col2:
-                clear_prediction = st.button("Clear", width="stretch")
-
-            if clear_prediction:
-                reset_prediction_state()
-                st.rerun()
-
-            if prediction_file is not None and submit_prediction:
-                try:
-                    prediction_df = pd.read_csv(prediction_file)
-                    prediction_df.columns = prediction_df.columns.str.strip()
-                    generate_predictions(prediction_df)
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
+            if prediction_file is not None:
+                st.success("File upload successful")
 
             if st.session_state.prediction_status:
                 if st.session_state.prediction_status.startswith("✅"):
                     st.success(st.session_state.prediction_status)
                 else:
                     st.error(st.session_state.prediction_status)
+
+            submit_prediction = st.button(
+                "Submit File for Predictions",
+                width="stretch",
+                disabled=(prediction_file is None),
+            )
 
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
@@ -980,6 +947,31 @@ with predict_tab:
                         mime="text/csv",
                         width="stretch",
                     )
+            else:
+                st.button(
+                    "📥 Download Prediction Results",
+                    width="stretch",
+                    disabled=True,
+                )
+
+            clear_prediction = st.button(
+                "Clear Prediction Results",
+                width="stretch",
+            )
+
+            if clear_prediction:
+                reset_prediction_state()
+                st.rerun()
+
+            if prediction_file is not None and submit_prediction:
+                try:
+                    prediction_df = pd.read_csv(prediction_file)
+                    prediction_df.columns = prediction_df.columns.str.strip()
+                    generate_predictions(prediction_df)
+                    st.rerun()
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
+                    st.rerun()
 
         with pred_col2:
             st.markdown("### Prediction Results")
@@ -1003,7 +995,7 @@ with predict_tab:
                 )
                 st.dataframe(preview_df, width="stretch", height=280)
             else:
-                st.info("Prediction results will appear here after you upload a file and click Submit File.")
+                st.info("Prediction results will appear here after you upload a file and submit it for predictions.")
 
         st.markdown("---")
         st.subheader("SHAP Explanation for a Specific Student")
