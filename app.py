@@ -81,6 +81,34 @@ st.markdown(
         padding: 0.5rem;
         background: white;
     }
+
+    .training-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem 1rem;
+        border-radius: 0.75rem;
+        background: #e0f2fe;
+        color: #075985;
+        border: 1px solid #bae6fd;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+    }
+
+    .training-spinner {
+        width: 18px;
+        height: 18px;
+        border: 3px solid #7dd3fc;
+        border-top: 3px solid #0284c7;
+        border-radius: 50%;
+        animation: training-spin 0.9s linear infinite;
+        flex-shrink: 0;
+    }
+
+    @keyframes training-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -333,7 +361,6 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    # Keep dimensions capped so renderer stays safe
     fig_width = min(max(13, 9 + max_len * 0.08), 18)
     fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
@@ -382,7 +409,6 @@ def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List
     shap_values_obj = explainer(X_sample)
     shap_values = extract_positive_class_shap_values(shap_values_obj)
 
-    # Feature importance plot
     plt.close("all")
     plt.figure(figsize=(11, 7))
     shap.summary_plot(
@@ -397,7 +423,6 @@ def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List
     importance_bytes = figure_to_png_bytes(fig_bar)
     plt.close(fig_bar)
 
-    # Summary plot
     plt.close("all")
     plt.figure(figsize=(11, 7))
     shap.summary_plot(
@@ -496,7 +521,6 @@ def train_institution_model(
 
     shap_explainer = shap.TreeExplainer(model)
 
-    # Global SHAP from a sample of training rows
     sample_size = min(300, X_train_transformed.shape[0])
     sample_idx = np.random.RandomState(42).choice(
         X_train_transformed.shape[0],
@@ -613,10 +637,18 @@ st.write(
     "then generate dropout predictions and SHAP-based explanations."
 )
 
-# Top-of-page training banner
+# Animated top-of-page training banner
 top_banner = st.empty()
 if st.session_state.show_training_banner:
-    top_banner.info("Model training in progress...")
+    top_banner.markdown(
+        """
+        <div class="training-banner">
+            <div class="training-spinner"></div>
+            <div>Model training in progress...</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain"])
 
@@ -674,7 +706,6 @@ with train_tab:
                 )
 
                 if st.button("🚀 Train Model", width="stretch"):
-                    # Clear old training outputs immediately
                     st.session_state.train_metrics = None
                     st.session_state.global_importance_plot_bytes = None
                     st.session_state.global_summary_plot_bytes = None
@@ -682,7 +713,15 @@ with train_tab:
                     st.session_state.show_training_banner = True
 
                     try:
-                        top_banner.info("Model training in progress...")
+                        top_banner.markdown(
+                            """
+                            <div class="training-banner">
+                                <div class="training-spinner"></div>
+                                <div>Model training in progress...</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                         train_institution_model(
                             training_df_preview,
                             target_column,
