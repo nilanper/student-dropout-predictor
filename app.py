@@ -10,9 +10,12 @@ import pandas as pd
 import shap
 import streamlit as st
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -60,6 +63,9 @@ def init_state():
         "last_training_file_name": None,
         "last_prediction_file_name": None,
         "show_training_banner": False,
+        "selected_model_name": None,
+        "model_comparison_df": None,
+        "selection_metric": "F1 Score",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -131,6 +137,8 @@ def reset_training_state():
     st.session_state.global_summary_plot_bytes = None
     st.session_state.is_trained = False
     st.session_state.train_success_message = ""
+    st.session_state.selected_model_name = None
+    st.session_state.model_comparison_df = None
     reset_prediction_state()
 
 
@@ -312,11 +320,103 @@ def clean_feature_names(feature_names: List[str]) -> List[str]:
     return cleaned
 
 
+def compute_metrics(y_true, y_pred, y_prob):
+    return {
+        "Accuracy": accuracy_score(y_true, y_pred),
+        "Precision": precision_score(y_true, y_pred, zero_division=0),
+        "Recall": recall_score(y_true, y_pred, zero_division=0),
+        "F1 Score": f1_score(y_true, y_pred, zero_division=0),
+        "ROC AUC": roc_auc_score(y_true, y_prob) if len(np.unique(y_true)) == 2 else np.nan,
+    }
+
+
+def get_model_by_name(model_name: str):
+    if model_name == "XGBoost":
+        if XGBClassifier is None:
+            raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
+        return XGBClassifier(
+            n_estimators=250,
+            max_depth=5,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            objective="binary:logistic",
+            eval_metric="logloss",
+            random_state=42,
+        )
+
+    if model_name == "Random Forest":
+        return RandomForestClassifier(
+            n_estimators=300,
+            max_depth=10,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            random_state=42,
+            n_jobs=-1,
+        )
+
+    if model_name == "Logistic Regression":
+        return LogisticRegression(
+            max_iter=1000,
+            random_state=42,
+        )
+
+    if model_name == "Neural Network":
+        return MLPClassifier(
+            hidden_layer_sizes=(64, 32),
+            activation="relu",
+            solver="adam",
+            alpha=0.0001,
+            learning_rate_init=0.001,
+            max_iter=500,
+            random_state=42,
+        )
+
+    raise ValueError(f"Unsupported model name: {model_name}")
+
+
+def train_single_model(model_name, X_train_t, X_test_t, y_train, y_test):
+    model = get_model_by_name(model_name)
+    model.fit(X_train_t, y_train)
+
+    y_prob = model.predict_proba(X_test_t)[:, 1]
+    y_pred = (y_prob >= 0.5).astype(int)
+
+    metrics = compute_metrics(y_test, y_pred, y_prob)
+    return model, metrics
+
+
+def choose_best_model(results_df: pd.DataFrame, metric_name: str) -> str:
+    best_idx = results_df[metric_name].astype(float).idxmax()
+    return results_df.loc[best_idx, "Model"]
+
+
+def get_explainer_for_model(model, model_name, X_background):
+    if model_name in ["XGBoost", "Random Forest"]:
+        return shap.TreeExplainer(model)
+
+    if model_name == "Logistic Regression":
+        try:
+            return shap.LinearExplainer(model, X_background)
+        except Exception:
+            return shap.Explainer(model, X_background)
+
+    if model_name == "Neural Network":
+        background = X_background[: min(100, len(X_background))]
+        return shap.Explainer(model.predict_proba, background)
+
+    return shap.Explainer(model, X_background)
+
+
 def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_names: List[str]):
     shap_values = explainer(X_row_transformed)
 
-    values = shap_values.values
-    base_values = shap_values.base_values
+    if hasattr(shap_values, "values"):
+        values = shap_values.values
+        base_values = shap_values.base_values
+    else:
+        values = np.array(shap_values)
+        base_values = 0.0
 
     if np.ndim(values) == 3:
         if values.shape[-1] == 2:
@@ -407,7 +507,10 @@ def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List
     cleaned_feature_names = clean_feature_names(feature_names)
 
     shap_values_obj = explainer(X_sample)
-    shap_values = extract_positive_class_shap_values(shap_values_obj)
+    if hasattr(shap_values_obj, "values"):
+        shap_values = extract_positive_class_shap_values(shap_values_obj)
+    else:
+        shap_values = np.array(shap_values_obj)
 
     plt.close("all")
     plt.figure(figsize=(11, 7))
@@ -458,9 +561,11 @@ def train_institution_model(
     student_id_column: str,
     student_name_column: str,
     test_size: float,
+    model_choice: str,
+    selection_metric: str,
 ):
-    if XGBClassifier is None:
-        raise RuntimeError("xgboost is not installed. Please add streamlit and xgboost to requirements.txt.")
+    if XGBClassifier is None and model_choice in ["XGBoost", "Run all 4 and choose the best"]:
+        raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
 
     reset_training_state()
     df = df.copy()
@@ -493,63 +598,91 @@ def train_institution_model(
     )
 
     preprocessor = build_preprocessor(X_train)
-    X_train_transformed = preprocessor.fit_transform(X_train)
-    X_test_transformed = preprocessor.transform(X_test)
+    X_train_t = preprocessor.fit_transform(X_train)
+    X_test_t = preprocessor.transform(X_test)
 
-    model = XGBClassifier(
-        n_estimators=250,
-        max_depth=5,
-        learning_rate=0.05,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        objective="binary:logistic",
-        eval_metric="logloss",
-        random_state=42,
+    candidate_models = (
+        ["Logistic Regression", "Random Forest", "XGBoost", "Neural Network"]
+        if model_choice == "Run all 4 and choose the best"
+        else [model_choice]
     )
-    model.fit(X_train_transformed, y_train)
 
-    y_prob = model.predict_proba(X_test_transformed)[:, 1]
-    y_pred = (y_prob >= 0.5).astype(int)
+    comparison_rows = []
+    trained_models = {}
 
-    metrics = {
-        "Accuracy": accuracy_score(y_test, y_pred),
-        "Precision": precision_score(y_test, y_pred, zero_division=0),
-        "Recall": recall_score(y_test, y_pred, zero_division=0),
-        "F1 Score": f1_score(y_test, y_pred, zero_division=0),
-        "ROC AUC": roc_auc_score(y_test, y_prob) if len(np.unique(y_test)) == 2 else np.nan,
+    for name in candidate_models:
+        model, metrics = train_single_model(name, X_train_t, X_test_t, y_train, y_test)
+        trained_models[name] = model
+        comparison_rows.append({
+            "Model": name,
+            "Accuracy": round(metrics["Accuracy"], 4),
+            "Precision": round(metrics["Precision"], 4),
+            "Recall": round(metrics["Recall"], 4),
+            "F1 Score": round(metrics["F1 Score"], 4),
+            "ROC AUC": round(metrics["ROC AUC"], 4) if pd.notna(metrics["ROC AUC"]) else np.nan,
+        })
+
+    comparison_df = pd.DataFrame(comparison_rows)
+
+    if model_choice == "Run all 4 and choose the best":
+        best_model_name = choose_best_model(comparison_df, selection_metric)
+    else:
+        best_model_name = model_choice
+
+    best_model = trained_models[best_model_name]
+    best_metrics_row = comparison_df[comparison_df["Model"] == best_model_name].iloc[0].to_dict()
+    best_metrics = {
+        "Accuracy": best_metrics_row["Accuracy"],
+        "Precision": best_metrics_row["Precision"],
+        "Recall": best_metrics_row["Recall"],
+        "F1 Score": best_metrics_row["F1 Score"],
+        "ROC AUC": best_metrics_row["ROC AUC"],
     }
 
-    shap_explainer = shap.TreeExplainer(model)
+    X_background = X_train_t[: min(200, len(X_train_t))]
+    shap_explainer = get_explainer_for_model(best_model, best_model_name, X_background)
 
-    sample_size = min(300, X_train_transformed.shape[0])
+    sample_size = min(300, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(
-        X_train_transformed.shape[0],
+        X_train_t.shape[0],
         size=sample_size,
         replace=False,
     )
-    X_shap_sample = X_train_transformed[sample_idx]
+    X_shap_sample = X_train_t[sample_idx]
     feature_names = get_transformed_feature_names(preprocessor)
+
     importance_bytes, summary_bytes = build_global_shap_plots(
         shap_explainer,
         X_shap_sample,
         feature_names,
     )
 
-    st.session_state.model = model
+    st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
     st.session_state.feature_columns = X.columns.tolist()
     st.session_state.target_column = target_column
     st.session_state.student_id_column = student_id_column if student_id_column in df.columns else None
     st.session_state.student_name_column = student_name_column if student_name_column in df.columns else None
-    st.session_state.train_metrics = metrics
+    st.session_state.train_metrics = best_metrics
     st.session_state.shap_explainer = shap_explainer
     st.session_state.global_importance_plot_bytes = importance_bytes
     st.session_state.global_summary_plot_bytes = summary_bytes
     st.session_state.is_trained = True
-    st.session_state.train_success_message = (
-        f"✅ Model trained successfully on {len(df)} records with {X.shape[1]} feature columns. "
-        "You can now use the next Tab 'Predict + Explain' for predictions and SHAP explanations."
-    )
+    st.session_state.selected_model_name = best_model_name
+    st.session_state.model_comparison_df = comparison_df
+    st.session_state.selection_metric = selection_metric
+
+    if model_choice == "Run all 4 and choose the best":
+        st.session_state.train_success_message = (
+            f"✅ Best model selected: {best_model_name} based on {selection_metric}. "
+            f"Model trained successfully on {len(df)} records with {X.shape[1]} feature columns. "
+            "You can now use the next Tab 'Predict + Explain' for predictions and SHAP explanations."
+        )
+    else:
+        st.session_state.train_success_message = (
+            f"✅ {best_model_name} trained successfully on {len(df)} records with {X.shape[1]} feature columns. "
+            "You can now use the next Tab 'Predict + Explain' for predictions and SHAP explanations."
+        )
 
 
 def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
@@ -705,11 +838,30 @@ with train_tab:
                     step=0.05,
                 )
 
+                model_choice = st.selectbox(
+                    "Model Selection",
+                    [
+                        "XGBoost",
+                        "Random Forest",
+                        "Logistic Regression",
+                        "Neural Network",
+                        "Run all 4 and choose the best",
+                    ],
+                )
+
+                selection_metric = st.selectbox(
+                    "Best Model Selection Metric",
+                    ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
+                    index=0,
+                )
+
                 if st.button("🚀 Train Model", width="stretch"):
                     st.session_state.train_metrics = None
                     st.session_state.global_importance_plot_bytes = None
                     st.session_state.global_summary_plot_bytes = None
                     st.session_state.train_success_message = ""
+                    st.session_state.selected_model_name = None
+                    st.session_state.model_comparison_df = None
                     st.session_state.show_training_banner = True
 
                     try:
@@ -728,6 +880,8 @@ with train_tab:
                             None if student_id_column == "None" else student_id_column,
                             None if student_name_column == "None" else student_name_column,
                             test_size,
+                            model_choice,
+                            selection_metric,
                         )
                     except Exception as e:
                         st.error(f"Model training failed: {e}")
@@ -746,6 +900,16 @@ with train_tab:
         if st.session_state.train_metrics is not None:
             metrics_df = generate_metrics_table(st.session_state.train_metrics)
             st.dataframe(metrics_df, width=380, hide_index=True)
+
+            if st.session_state.selected_model_name is not None:
+                st.markdown(f"**Selected Model:** {st.session_state.selected_model_name}")
+
+            if (
+                st.session_state.model_comparison_df is not None
+                and len(st.session_state.model_comparison_df) > 1
+            ):
+                st.markdown("### Model Comparison")
+                st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
 
             st.markdown("### Global SHAP Summary")
             plot_col1, plot_col2 = st.columns(2)
