@@ -55,7 +55,7 @@ def init_state():
         "latest_plot_bytes": None,
         "global_importance_plot_bytes": None,
         "global_summary_plot_bytes": None,
-        "shap_explainer": None,
+        "shap_explainer": None,  # local probability-scale explainer
         "is_trained": False,
         "train_success_message": "",
         "prediction_status": "",
@@ -400,18 +400,39 @@ def choose_best_model(results_df: pd.DataFrame, metric_name: str) -> str:
     return results_df.loc[best_idx, "Model"]
 
 
-def get_explainer_for_model(model, model_name, X_background):
-    background = X_background[: min(100, len(X_background))]
+# -----------------------------
+# Split SHAP approach
+# -----------------------------
+def get_local_probability_explainer(model, X_background):
+    background = X_background[: min(50, len(X_background))]
     return shap.Explainer(model.predict_proba, background)
 
 
-def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_names: List[str]):
+def get_fast_global_explainer(model, model_name, X_background):
+    background = X_background[: min(50, len(X_background))]
+
+    if model_name in ["XGBoost", "Random Forest"]:
+        return shap.TreeExplainer(model)
+
+    if model_name == "Logistic Regression":
+        try:
+            return shap.LinearExplainer(model, background)
+        except Exception:
+            return shap.Explainer(model, background)
+
+    if model_name == "Neural Network":
+        background = background[: min(25, len(background))]
+        return shap.Explainer(model.predict_proba, background)
+
+    return shap.Explainer(model, background)
+
+
+def create_shap_explanation_probability(explainer, X_row_transformed: np.ndarray, feature_names: List[str]):
     shap_values = explainer(X_row_transformed)
 
     values = shap_values.values
     base_values = shap_values.base_values
 
-    # Positive class probability (class 1)
     if np.ndim(values) == 3:
         values_1d = values[0, :, 1]
     elif np.ndim(values) == 2:
@@ -422,10 +443,7 @@ def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_na
     if np.ndim(base_values) == 2:
         base_value = base_values[0, 1]
     elif np.ndim(base_values) == 1:
-        if len(base_values) > 1:
-            base_value = base_values[1]
-        else:
-            base_value = base_values[0]
+        base_value = base_values[1] if len(base_values) > 1 else base_values[0]
     else:
         base_value = base_values
 
@@ -437,6 +455,65 @@ def create_shap_explanation(explainer, X_row_transformed: np.ndarray, feature_na
         data=row_data,
         feature_names=clean_feature_names(feature_names),
     )
+
+
+def extract_positive_class_shap_values(values_obj) -> np.ndarray:
+    values = values_obj.values if hasattr(values_obj, "values") else values_obj
+
+    if isinstance(values, list):
+        if len(values) >= 2:
+            return np.array(values[1])
+        return np.array(values[0])
+
+    values = np.array(values)
+    if values.ndim == 3:
+        if values.shape[-1] >= 2:
+            return values[:, :, 1]
+        return values[:, :, 0]
+    if values.ndim == 2:
+        return values
+    raise ValueError("Unexpected SHAP values shape for global plots.")
+
+
+def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarray, feature_names: List[str]):
+    cleaned_feature_names = clean_feature_names(feature_names)
+    shap_values_obj = explainer(X_sample)
+
+    if model_name in ["XGBoost", "Random Forest"]:
+        shap_values = extract_positive_class_shap_values(shap_values_obj)
+    elif hasattr(shap_values_obj, "values"):
+        shap_values = extract_positive_class_shap_values(shap_values_obj)
+    else:
+        shap_values = np.array(shap_values_obj)
+
+    plt.close("all")
+    plt.figure(figsize=(11, 7))
+    shap.summary_plot(
+        shap_values,
+        X_sample,
+        feature_names=cleaned_feature_names,
+        plot_type="bar",
+        max_display=15,
+        show=False,
+    )
+    fig_bar = plt.gcf()
+    importance_bytes = figure_to_png_bytes(fig_bar)
+    plt.close(fig_bar)
+
+    plt.close("all")
+    plt.figure(figsize=(11, 7))
+    shap.summary_plot(
+        shap_values,
+        X_sample,
+        feature_names=cleaned_feature_names,
+        max_display=15,
+        show=False,
+    )
+    fig_summary = plt.gcf()
+    summary_bytes = figure_to_png_bytes(fig_summary)
+    plt.close(fig_summary)
+
+    return importance_bytes, summary_bytes
 
 
 def build_shap_figure(explanation, max_display: int = 10):
@@ -471,47 +548,6 @@ def figure_to_png_bytes(fig) -> bytes:
         fig.savefig(buffer, format="png", dpi=160)
     buffer.seek(0)
     return buffer.getvalue()
-
-
-def build_global_shap_plots(explainer, X_sample: np.ndarray, feature_names: List[str]):
-    cleaned_feature_names = clean_feature_names(feature_names)
-
-    shap_values_obj = explainer(X_sample)
-    values = shap_values_obj.values
-
-    if np.ndim(values) == 3:
-        shap_values = values[:, :, 1]
-    else:
-        shap_values = values
-
-    plt.close("all")
-    plt.figure(figsize=(11, 7))
-    shap.summary_plot(
-        shap_values,
-        X_sample,
-        feature_names=cleaned_feature_names,
-        plot_type="bar",
-        max_display=15,
-        show=False,
-    )
-    fig_bar = plt.gcf()
-    importance_bytes = figure_to_png_bytes(fig_bar)
-    plt.close(fig_bar)
-
-    plt.close("all")
-    plt.figure(figsize=(11, 7))
-    shap.summary_plot(
-        shap_values,
-        X_sample,
-        feature_names=cleaned_feature_names,
-        max_display=15,
-        show=False,
-    )
-    fig_summary = plt.gcf()
-    summary_bytes = figure_to_png_bytes(fig_summary)
-    plt.close(fig_summary)
-
-    return importance_bytes, summary_bytes
 
 
 def get_student_id_choices_from_predictions() -> List[str]:
@@ -611,20 +647,27 @@ def train_institution_model(
         "ROC AUC": best_metrics_row["ROC AUC"],
     }
 
-    X_background = X_train_t[: min(200, len(X_train_t))]
-    shap_explainer = get_explainer_for_model(best_model, best_model_name, X_background)
+    feature_names = get_transformed_feature_names(preprocessor)
 
-    sample_size = min(300, X_train_t.shape[0])
+    # Local probability-scale explainer for Tab 2
+    X_local_background = X_train_t[: min(50, len(X_train_t))]
+    local_explainer = get_local_probability_explainer(best_model, X_local_background)
+
+    # Faster global explainer for Tab 1
+    X_global_background = X_train_t[: min(50, len(X_train_t))]
+    global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
+
+    global_sample_size = min(100, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(
         X_train_t.shape[0],
-        size=sample_size,
+        size=global_sample_size,
         replace=False,
     )
     X_shap_sample = X_train_t[sample_idx]
-    feature_names = get_transformed_feature_names(preprocessor)
 
-    importance_bytes, summary_bytes = build_global_shap_plots(
-        shap_explainer,
+    importance_bytes, summary_bytes = build_global_shap_plots_fast(
+        global_explainer,
+        best_model_name,
         X_shap_sample,
         feature_names,
     )
@@ -636,7 +679,7 @@ def train_institution_model(
     st.session_state.student_id_column = student_id_column if student_id_column in df.columns else None
     st.session_state.student_name_column = student_name_column if student_name_column in df.columns else None
     st.session_state.train_metrics = best_metrics
-    st.session_state.shap_explainer = shap_explainer
+    st.session_state.shap_explainer = local_explainer
     st.session_state.global_importance_plot_bytes = importance_bytes
     st.session_state.global_summary_plot_bytes = summary_bytes
     st.session_state.is_trained = True
@@ -715,7 +758,7 @@ def explain_student(chosen_id: str):
     X_row = row[st.session_state.feature_columns]
     X_row_transformed = st.session_state.preprocessor.transform(X_row)
 
-    explanation = create_shap_explanation(
+    explanation = create_shap_explanation_probability(
         st.session_state.shap_explainer,
         X_row_transformed,
         get_transformed_feature_names(st.session_state.preprocessor),
