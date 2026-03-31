@@ -807,7 +807,7 @@ train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict 
 
 with train_tab:
     st.subheader("Train Institution Model")
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1, 3])
 
     with col1:
         training_file = st.file_uploader(
