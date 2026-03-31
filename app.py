@@ -62,7 +62,6 @@ def init_state():
         "explain_status": "",
         "last_training_file_name": None,
         "last_prediction_file_name": None,
-        "show_training_banner": False,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -98,6 +97,7 @@ st.markdown(
         color: #075985;
         border: 1px solid #bae6fd;
         font-weight: 600;
+        margin-top: 0.6rem;
         margin-bottom: 0.75rem;
     }
 
@@ -177,6 +177,18 @@ def format_probability(prob: float) -> str:
     if pd.isna(prob):
         return "N/A"
     return f"{prob * 100:.2f}%"
+
+
+def render_training_status(placeholder, message: str):
+    placeholder.markdown(
+        f"""
+        <div class="training-banner">
+            <div class="training-spinner"></div>
+            <div>{message}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def normalize_binary_target(series: pd.Series) -> pd.Series:
@@ -404,12 +416,12 @@ def choose_best_model(results_df: pd.DataFrame, metric_name: str) -> str:
 # Split SHAP approach
 # -----------------------------
 def get_local_probability_explainer(model, X_background):
-    background = X_background[: min(50, len(X_background))]
+    background = X_background[: min(200, len(X_background))]
     return shap.Explainer(model.predict_proba, background)
 
 
 def get_fast_global_explainer(model, model_name, X_background):
-    background = X_background[: min(50, len(X_background))]
+    background = X_background[: min(200, len(X_background))]
 
     if model_name in ["XGBoost", "Random Forest"]:
         return shap.TreeExplainer(model)
@@ -421,8 +433,7 @@ def get_fast_global_explainer(model, model_name, X_background):
             return shap.Explainer(model, background)
 
     if model_name == "Neural Network":
-        background = background[: min(25, len(background))]
-        return shap.Explainer(model.predict_proba, background)
+        return shap.Explainer(model.predict_proba, background[: min(100, len(background))])
 
     return shap.Explainer(model, background)
 
@@ -571,6 +582,7 @@ def train_institution_model(
     test_size: float,
     model_choice: str,
     selection_metric: str,
+    status_placeholder,
 ):
     if XGBClassifier is None and model_choice in ["XGBoost", "Run all 4 and choose the best"]:
         raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
@@ -597,6 +609,7 @@ def train_institution_model(
     if X.shape[1] == 0:
         raise ValueError("No usable feature columns found after removing target / ID / name columns.")
 
+    render_training_status(status_placeholder, "Preparing training data...")
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -615,10 +628,12 @@ def train_institution_model(
         else [model_choice]
     )
 
+    render_training_status(status_placeholder, "Training models...")
     comparison_rows = []
     trained_models = {}
 
-    for name in candidate_models:
+    for idx, name in enumerate(candidate_models, start=1):
+        render_training_status(status_placeholder, f"Training models... ({idx}/{len(candidate_models)}) {name}")
         model, metrics = train_single_model(name, X_train_t, X_test_t, y_train, y_test)
         trained_models[name] = model
         comparison_rows.append({
@@ -632,6 +647,7 @@ def train_institution_model(
 
     comparison_df = pd.DataFrame(comparison_rows)
 
+    render_training_status(status_placeholder, "Selecting best model...")
     if model_choice == "Run all 4 and choose the best":
         best_model_name = choose_best_model(comparison_df, selection_metric)
     else:
@@ -649,11 +665,11 @@ def train_institution_model(
 
     feature_names = get_transformed_feature_names(preprocessor)
 
-    # Local probability-scale explainer for Tab 2
+    render_training_status(status_placeholder, "Building local SHAP explainer...")
     X_local_background = X_train_t[: min(200, len(X_train_t))]
     local_explainer = get_local_probability_explainer(best_model, X_local_background)
 
-    # Faster global explainer for Tab 1
+    render_training_status(status_placeholder, "Generating global SHAP plots...")
     X_global_background = X_train_t[: min(200, len(X_train_t))]
     global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
 
@@ -672,6 +688,7 @@ def train_institution_model(
         feature_names,
     )
 
+    render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
     st.session_state.feature_columns = X.columns.tolist()
@@ -786,19 +803,6 @@ st.write(
     "then generate dropout predictions and SHAP-based explanations."
 )
 
-# Animated top-of-page training banner
-top_banner = st.empty()
-if st.session_state.show_training_banner:
-    top_banner.markdown(
-        """
-        <div class="training-banner">
-            <div class="training-spinner"></div>
-            <div>Model training in progress...</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
 train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain"])
 
 with train_tab:
@@ -871,25 +875,20 @@ with train_tab:
                     index=0,
                 )
 
-                if st.button("🚀 Train Model", width="stretch"):
+                train_button = st.button("🚀 Train Model", width="stretch")
+                training_status_placeholder = st.empty()
+
+                if train_button:
                     st.session_state.train_metrics = None
                     st.session_state.global_importance_plot_bytes = None
                     st.session_state.global_summary_plot_bytes = None
                     st.session_state.train_success_message = ""
                     st.session_state.selected_model_name = None
                     st.session_state.model_comparison_df = None
-                    st.session_state.show_training_banner = True
+
+                    render_training_status(training_status_placeholder, "Preparing training data...")
 
                     try:
-                        top_banner.markdown(
-                            """
-                            <div class="training-banner">
-                                <div class="training-spinner"></div>
-                                <div>Model training in progress...</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
                         train_institution_model(
                             training_df_preview,
                             target_column,
@@ -898,11 +897,12 @@ with train_tab:
                             test_size,
                             model_choice,
                             selection_metric,
+                            training_status_placeholder,
                         )
                     except Exception as e:
                         st.error(f"Model training failed: {e}")
                     finally:
-                        st.session_state.show_training_banner = False
+                        training_status_placeholder.empty()
                         st.rerun()
 
             except Exception as e:
