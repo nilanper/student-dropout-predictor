@@ -650,14 +650,14 @@ def train_institution_model(
     feature_names = get_transformed_feature_names(preprocessor)
 
     # Local probability-scale explainer for Tab 2
-    X_local_background = X_train_t[: min(50, len(X_train_t))]
+    X_local_background = X_train_t[: min(200, len(X_train_t))]
     local_explainer = get_local_probability_explainer(best_model, X_local_background)
 
     # Faster global explainer for Tab 1
-    X_global_background = X_train_t[: min(50, len(X_train_t))]
+    X_global_background = X_train_t[: min(200, len(X_train_t))]
     global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
 
-    global_sample_size = min(100, X_train_t.shape[0])
+    global_sample_size = min(300, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(
         X_train_t.shape[0],
         size=global_sample_size,
