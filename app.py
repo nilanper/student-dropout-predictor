@@ -162,6 +162,8 @@ def clear_status_messages_on_new_upload(training_file, prediction_file):
         st.session_state.last_training_file_name = current_training_name
 
     if current_prediction_name != st.session_state.last_prediction_file_name:
+        st.session_state.predict_df = None
+        st.session_state.prediction_file = None
         st.session_state.prediction_status = ""
         st.session_state.explain_status = ""
         st.session_state.latest_explanation = None
@@ -762,7 +764,9 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
-    st.session_state.prediction_status = f"✅ Predictions generated for {len(result_df)} students."
+    st.session_state.prediction_status = (
+        f"✅ Predictions generated successfully for {len(result_df)} records."
+    )
 
     return result_df
 
@@ -1037,6 +1041,7 @@ with predict_tab:
                             )
 
                         if extra_cols:
+                            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
                             st.markdown("**Different / unexpected columns in uploaded file**")
                             st.markdown(
                                 f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
