@@ -947,39 +947,30 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                col_title, col_help = st.columns([4, 3])
-
-with col_title:
-    st.markdown("**Feature Importance Plot**")
-
-with col_help:
-    st.markdown(
-        """
-        <div style="display:flex; justify-content:flex-end; white-space:nowrap;">
-        """,
-        unsafe_allow_html=True,
-    )
-    with st.popover("ℹ️ How to read this chart"):
-        st.markdown("""
+                title_col, help_col = st.columns([6, 1])
+                with title_col:
+                    st.markdown("**Feature Importance Plot**")
+                with help_col:
+                    with st.popover("ℹ️"):
+                        st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
 - Longer bars mean a factor has a **stronger influence**
 - Features at the top are the **most important**
 
-This chart shows **importance only**, not direction.
+This chart shows **importance only**, not whether a factor increases or decreases risk.
 """)
-    st.markdown("</div>", unsafe_allow_html=True)
                 if st.session_state.global_importance_plot_bytes is not None:
                     st.image(st.session_state.global_importance_plot_bytes, width="stretch")
                 else:
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                title_col, help_col = st.columns([4, 2])
+                title_col, help_col = st.columns([6, 1])
                 with title_col:
                     st.markdown("**Summary Plot**")
                 with help_col:
-                    with st.popover("ℹ️ How to read this chart"):
+                    with st.popover("ℹ️"):
                         st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
 
@@ -1187,11 +1178,11 @@ with predict_tab:
                 )
 
         with shap_col2:
-            title_col, help_col = st.columns([4, 2])
+            title_col, help_col = st.columns([6, 1])
             with title_col:
                 st.markdown("### Individual SHAP Waterfall Plot")
             with help_col:
-                with st.popover("ℹ️ How to read this chart"):
+                with st.popover("ℹ️"):
                     st.markdown("""
 This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
