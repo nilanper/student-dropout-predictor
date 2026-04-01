@@ -980,11 +980,11 @@ with train_tab:
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                title_col, help_col = st.columns([6, 2])
-                with title_col:
+               col_left, col_center, col_right = st.columns([3, 2, 1])
+
+                with col_left:
                     st.markdown("**Summary Plot**")
                 with help_col:
-                    st.markdown("<div style='display:flex; justify-content:flex-end;'>", unsafe_allow_html=True)
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
