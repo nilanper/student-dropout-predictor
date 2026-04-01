@@ -157,11 +157,16 @@ def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_name = training_file.name if training_file is not None else None
     current_prediction_name = prediction_file.name if prediction_file is not None else None
 
-    if current_training_name != st.session_state.last_training_file_name:
+    # Only clear training messages when a newly uploaded training file is actually present.
+    # This prevents unrelated widget interactions from wiping status during normal reruns.
+    if training_file is not None and current_training_name != st.session_state.last_training_file_name:
         st.session_state.train_success_message = ""
         st.session_state.last_training_file_name = current_training_name
 
-    if current_prediction_name != st.session_state.last_prediction_file_name:
+    # Only clear prediction outputs when a newly uploaded prediction file is actually present.
+    # Selecting a Student ID in the SHAP section also triggers a rerun, and we should keep
+    # the current prediction table and SHAP state intact during that rerun.
+    if prediction_file is not None and current_prediction_name != st.session_state.last_prediction_file_name:
         st.session_state.predict_df = None
         st.session_state.prediction_file = None
         st.session_state.prediction_status = ""
@@ -1136,6 +1141,7 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
+                    key="shap_student_id_select",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
