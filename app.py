@@ -61,10 +61,6 @@ def init_state():
         "train_success_message": "",
         "prediction_status": "",
         "explain_status": "",
-        "last_training_file_name": None,
-        "last_prediction_file_name": None,
-        "training_file_token": None,
-        "prediction_file_token": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -155,44 +151,16 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
-def get_uploaded_file_token(uploaded_file):
-    if uploaded_file is None:
-        return None
-    try:
-        content = uploaded_file.getvalue()
-        return (uploaded_file.name, len(content), hash(content))
-    except Exception:
-        return (uploaded_file.name,)
+def on_training_file_change():
+    reset_training_state()
 
 
-def sync_prediction_uploader_state(prediction_file):
-    current_token = get_uploaded_file_token(prediction_file)
-    previous_token = st.session_state.get("prediction_file_token")
-
-    if current_token != previous_token:
-        reset_prediction_state()
-        st.session_state.prediction_file_token = current_token
-
-
-def clear_status_messages_on_new_upload(training_file, prediction_file):
-    current_training_name = training_file.name if training_file is not None else None
-    current_prediction_name = prediction_file.name if prediction_file is not None else None
-
-    if current_training_name != st.session_state.last_training_file_name:
-        st.session_state.train_success_message = ""
-        st.session_state.last_training_file_name = current_training_name
-
-    if current_prediction_name != st.session_state.last_prediction_file_name:
-        st.session_state.predict_df = None
-        st.session_state.prediction_file = None
-        st.session_state.prediction_status = ""
-        st.session_state.explain_status = ""
-        st.session_state.latest_explanation = None
-        st.session_state.latest_plot_bytes = None
-        st.session_state.last_prediction_file_name = current_prediction_name
+def on_prediction_file_change():
+    reset_prediction_state()
 
 
 def get_model_status_text() -> str:
+
     if st.session_state.is_trained:
         return "✅ Model status: Trained successfully. This Tab is ready for prediction and SHAP explanations."
     return "⚠️ Model status: Not trained yet. Please complete model training in the first Tab before using this Tab"
@@ -861,8 +829,8 @@ with train_tab:
             "📄 Upload Labeled Training CSV",
             type=["csv"],
             key="training_file_uploader",
+            on_change=on_training_file_change,
         )
-        clear_status_messages_on_new_upload(training_file, None)
 
         target_column = None
         student_id_column = None
@@ -1031,8 +999,8 @@ with predict_tab:
                 "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
+                on_change=on_prediction_file_change,
             )
-            sync_prediction_uploader_state(prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
@@ -1058,12 +1026,6 @@ with predict_tab:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
                     st.session_state.prediction_status = f"❌ {prediction_validation_message}"
                     prediction_file_is_valid = False
-
-            if st.session_state.prediction_status:
-                if st.session_state.prediction_status.startswith("❌"):
-                    st.error(st.session_state.prediction_status)
-                else:
-                    st.success(st.session_state.prediction_status)
 
             if prediction_file is not None and not prediction_file_is_valid:
                 if missing_cols:
@@ -1095,6 +1057,12 @@ with predict_tab:
                     generate_predictions(fresh_prediction_df)
                 except Exception as e:
                     st.session_state.prediction_status = f"❌ {e}"
+
+            if st.session_state.prediction_status:
+                if st.session_state.prediction_status.startswith("❌"):
+                    st.error(st.session_state.prediction_status)
+                else:
+                    st.success(st.session_state.prediction_status)
 
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
@@ -1158,6 +1126,7 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
+                    key="shap_student_id_select",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
