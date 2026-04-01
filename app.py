@@ -958,7 +958,7 @@ with train_tab:
                 with title_col:
                     st.markdown("**Feature Importance Plot**")
                 with help_col:
-                    st.markdown("<div style='display:flex; justify-content:flex-end; margin-top:10px;'>", unsafe_allow_html=True)
+                    st.markdown("<div style='display:flex; justify-content:flex-end; margin-top:16px;'>", unsafe_allow_html=True)
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
