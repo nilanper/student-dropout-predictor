@@ -223,7 +223,9 @@ def handle_training_file_change():
     current_training_signature = get_uploaded_file_signature(uploaded)
 
     if current_training_signature != st.session_state.last_training_file_signature:
-        st.session_state.train_success_message = ""
+        # Clear ALL training outputs when the training uploader changes,
+        # including when the current file is removed with the X button.
+        reset_training_state()
         st.session_state.last_training_file_name = current_training_name
         st.session_state.last_training_file_signature = current_training_signature
 
