@@ -63,8 +63,6 @@ def init_state():
         "explain_status": "",
         "last_training_file_name": None,
         "last_prediction_file_name": None,
-        "last_training_file_signature": None,
-        "last_prediction_file_signature": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -155,47 +153,15 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
-def get_uploaded_file_signature(uploaded_file):
-    """Return a stable signature for the current uploaded file, or None when no file is present."""
-    if uploaded_file is None:
-        return None
-
-    try:
-        file_bytes = uploaded_file.getvalue()
-    except Exception:
-        try:
-            uploaded_file.seek(0)
-            file_bytes = uploaded_file.read()
-        except Exception:
-            file_bytes = b""
-
-    import hashlib
-    file_hash = hashlib.md5(file_bytes).hexdigest()
-    signature = f"{uploaded_file.name}|{len(file_bytes)}|{file_hash}"
-
-    try:
-        uploaded_file.seek(0)
-    except Exception:
-        pass
-
-    return signature
-
-
 def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_name = training_file.name if training_file is not None else None
     current_prediction_name = prediction_file.name if prediction_file is not None else None
-    current_training_signature = get_uploaded_file_signature(training_file)
-    current_prediction_signature = get_uploaded_file_signature(prediction_file)
 
-    # Clear training messages only when the training upload actually changes or is removed.
-    if current_training_signature != st.session_state.last_training_file_signature:
+    if current_training_name != st.session_state.last_training_file_name:
         st.session_state.train_success_message = ""
         st.session_state.last_training_file_name = current_training_name
-        st.session_state.last_training_file_signature = current_training_signature
 
-    # Legacy path kept for training-tab usage. Prediction clearing is now handled
-    # by the file_uploader on_change callback so it does not run on SHAP selectbox reruns.
-    if prediction_file is not None and current_prediction_signature != st.session_state.last_prediction_file_signature:
+    if current_prediction_name != st.session_state.last_prediction_file_name:
         st.session_state.predict_df = None
         st.session_state.prediction_file = None
         st.session_state.prediction_status = ""
@@ -203,31 +169,6 @@ def clear_status_messages_on_new_upload(training_file, prediction_file):
         st.session_state.latest_explanation = None
         st.session_state.latest_plot_bytes = None
         st.session_state.last_prediction_file_name = current_prediction_name
-        st.session_state.last_prediction_file_signature = current_prediction_signature
-
-
-def handle_prediction_file_change():
-    uploaded = st.session_state.get("prediction_file_uploader")
-    current_prediction_name = uploaded.name if uploaded is not None else None
-    current_prediction_signature = get_uploaded_file_signature(uploaded)
-
-    if current_prediction_signature != st.session_state.last_prediction_file_signature:
-        reset_prediction_state()
-        st.session_state.last_prediction_file_name = current_prediction_name
-        st.session_state.last_prediction_file_signature = current_prediction_signature
-
-
-def handle_training_file_change():
-    uploaded = st.session_state.get("training_file_uploader")
-    current_training_name = uploaded.name if uploaded is not None else None
-    current_training_signature = get_uploaded_file_signature(uploaded)
-
-    if current_training_signature != st.session_state.last_training_file_signature:
-        # Clear ALL training outputs when the training uploader changes,
-        # including when the current file is removed with the X button.
-        reset_training_state()
-        st.session_state.last_training_file_name = current_training_name
-        st.session_state.last_training_file_signature = current_training_signature
 
 
 def get_model_status_text() -> str:
@@ -899,8 +840,8 @@ with train_tab:
             "📄 Upload Labeled Training CSV",
             type=["csv"],
             key="training_file_uploader",
-            on_change=handle_training_file_change,
         )
+        clear_status_messages_on_new_upload(training_file, None)
 
         target_column = None
         student_id_column = None
@@ -1069,8 +1010,8 @@ with predict_tab:
                 "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
-                on_change=handle_prediction_file_change,
             )
+            clear_status_messages_on_new_upload(None, prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
@@ -1087,9 +1028,7 @@ with predict_tab:
                         validate_prediction_columns(prediction_df_preview)
                     )
 
-                    if prediction_file_is_valid:
-                        st.success("File upload successful")
-                    else:
+                    if not prediction_file_is_valid:
                         st.error(prediction_validation_message)
 
                         if missing_cols:
@@ -1150,13 +1089,11 @@ with predict_tab:
 
             if prediction_file is not None and submit_prediction and prediction_file_is_valid:
                 try:
-                    # Re-read the uploaded file at click time so prediction generation
-                    # does not depend on an earlier preview dataframe.
-                    prediction_df_for_run = pd.read_csv(io.BytesIO(prediction_file.getvalue()))
-                    prediction_df_for_run.columns = prediction_df_for_run.columns.str.strip()
-                    generate_predictions(prediction_df_for_run)
+                    generate_predictions(prediction_df_preview)
+                    st.rerun()
                 except Exception as e:
                     st.session_state.prediction_status = f"❌ {e}"
+                    st.rerun()
 
         with pred_col2:
             st.markdown("### Prediction Results")
@@ -1195,7 +1132,6 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
-                    key="selected_student_id_selectbox",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
