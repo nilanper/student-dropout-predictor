@@ -63,6 +63,8 @@ def init_state():
         "explain_status": "",
         "last_training_file_name": None,
         "last_prediction_file_name": None,
+        "training_file_token": None,
+        "prediction_file_token": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -151,6 +153,25 @@ def reset_prediction_state():
     st.session_state.latest_plot_bytes = None
     st.session_state.prediction_status = ""
     st.session_state.explain_status = ""
+
+
+def get_uploaded_file_token(uploaded_file):
+    if uploaded_file is None:
+        return None
+    try:
+        content = uploaded_file.getvalue()
+        return (uploaded_file.name, len(content), hash(content))
+    except Exception:
+        return (uploaded_file.name,)
+
+
+def sync_prediction_uploader_state(prediction_file):
+    current_token = get_uploaded_file_token(prediction_file)
+    previous_token = st.session_state.get("prediction_file_token")
+
+    if current_token != previous_token:
+        reset_prediction_state()
+        st.session_state.prediction_file_token = current_token
 
 
 def clear_status_messages_on_new_upload(training_file, prediction_file):
@@ -1011,7 +1032,7 @@ with predict_tab:
                 type=["csv"],
                 key="prediction_file_uploader",
             )
-            clear_status_messages_on_new_upload(None, prediction_file)
+            sync_prediction_uploader_state(prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
@@ -1028,33 +1049,37 @@ with predict_tab:
                         validate_prediction_columns(prediction_df_preview)
                     )
 
-                    if not prediction_file_is_valid:
-                        st.error(prediction_validation_message)
-
-                        if missing_cols:
-                            st.markdown("**Missing columns**")
-                            st.markdown(
-                                f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(missing_cols)}</div>",
-                                unsafe_allow_html=True,
-                            )
-
-                        if extra_cols:
-                            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-                            st.markdown("**Different / unexpected columns in uploaded file**")
-                            st.markdown(
-                                f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
-                                unsafe_allow_html=True,
-                            )
+                    if prediction_file_is_valid and not st.session_state.prediction_status.startswith("✅ Predictions generated"):
+                        st.session_state.prediction_status = "Upload successful. File is compatible with the model."
+                    elif not prediction_file_is_valid:
+                        st.session_state.prediction_status = f"❌ {prediction_validation_message}"
 
                 except Exception as e:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
-                    st.error(prediction_validation_message)
+                    st.session_state.prediction_status = f"❌ {prediction_validation_message}"
+                    prediction_file_is_valid = False
 
             if st.session_state.prediction_status:
-                if st.session_state.prediction_status.startswith("✅"):
-                    st.success(st.session_state.prediction_status)
-                else:
+                if st.session_state.prediction_status.startswith("❌"):
                     st.error(st.session_state.prediction_status)
+                else:
+                    st.success(st.session_state.prediction_status)
+
+            if prediction_file is not None and not prediction_file_is_valid:
+                if missing_cols:
+                    st.markdown("**Missing columns**")
+                    st.markdown(
+                        f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(missing_cols)}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                if extra_cols:
+                    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+                    st.markdown("**Different / unexpected columns in uploaded file**")
+                    st.markdown(
+                        f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
+                        unsafe_allow_html=True,
+                    )
 
             submit_prediction = st.button(
                 "Submit File for Predictions",
@@ -1062,11 +1087,20 @@ with predict_tab:
                 disabled=(prediction_file is None or not prediction_file_is_valid),
             )
 
+            if submit_prediction:
+                try:
+                    prediction_file.seek(0)
+                    fresh_prediction_df = pd.read_csv(prediction_file)
+                    fresh_prediction_df.columns = fresh_prediction_df.columns.str.strip()
+                    generate_predictions(fresh_prediction_df)
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
+
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
                     st.download_button(
                         "📥 Download Prediction Results",
-                        data=f,
+                        data=f.read(),
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
                         width="stretch",
@@ -1086,14 +1120,6 @@ with predict_tab:
             if clear_prediction:
                 reset_prediction_state()
                 st.rerun()
-
-            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
-                try:
-                    generate_predictions(prediction_df_preview)
-                    st.rerun()
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
-                    st.rerun()
 
         with pred_col2:
             st.markdown("### Prediction Results")
