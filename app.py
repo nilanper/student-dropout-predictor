@@ -984,7 +984,10 @@ with train_tab:
 
             with col_left:
                     st.markdown("**Summary Plot**")
-                with help_col:
+                with col_center:
+                    st.write("")  # spacing
+                    st.write("")
+                    st.write("")
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
                 This chart shows how different factors influence dropout risk **across all students**.
