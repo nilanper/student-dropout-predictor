@@ -114,6 +114,13 @@ st.markdown(
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+
+    button[kind="secondary"] {
+        white-space: nowrap !important;
+        width: auto !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -947,11 +954,12 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                title_col, help_col = st.columns([6, 1])
+                title_col, help_col = st.columns([6, 2])
                 with title_col:
                     st.markdown("**Feature Importance Plot**")
                 with help_col:
-                    with st.popover("ℹ️"):
+                    st.markdown("<div style='display:flex; justify-content:flex-end;'>", unsafe_allow_html=True)
+                    with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
@@ -960,17 +968,19 @@ This chart shows the **most important factors** affecting dropout risk overall.
 
 This chart shows **importance only**, not whether a factor increases or decreases risk.
 """)
+                    st.markdown("</div>", unsafe_allow_html=True)
                 if st.session_state.global_importance_plot_bytes is not None:
                     st.image(st.session_state.global_importance_plot_bytes, width="stretch")
                 else:
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                title_col, help_col = st.columns([6, 1])
+                title_col, help_col = st.columns([6, 2])
                 with title_col:
                     st.markdown("**Summary Plot**")
                 with help_col:
-                    with st.popover("ℹ️"):
+                    st.markdown("<div style='display:flex; justify-content:flex-end;'>", unsafe_allow_html=True)
+                    with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
 
@@ -981,6 +991,7 @@ This chart shows how different factors influence dropout risk **across all stude
 Dots to the **right** tend to increase dropout risk.  
 Dots to the **left** tend to decrease dropout risk.
 """)
+                    st.markdown("</div>", unsafe_allow_html=True)
                 if st.session_state.global_summary_plot_bytes is not None:
                     st.image(st.session_state.global_summary_plot_bytes, width="stretch")
                 else:
@@ -1178,11 +1189,12 @@ with predict_tab:
                 )
 
         with shap_col2:
-            title_col, help_col = st.columns([6, 1])
+            title_col, help_col = st.columns([6, 2])
             with title_col:
                 st.markdown("### Individual SHAP Waterfall Plot")
             with help_col:
-                with st.popover("ℹ️"):
+                st.markdown("<div style='display:flex; justify-content:flex-end;'>", unsafe_allow_html=True)
+                with st.popover("ℹ️ How to read this chart"):
                     st.markdown("""
 This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
@@ -1191,6 +1203,7 @@ This plot explains **why this specific student** was predicted as Dropout or No 
 - Larger bars mean a **stronger effect**
 - The final prediction is based on the combined effect of all displayed factors
 """)
+                st.markdown("</div>", unsafe_allow_html=True)
 
             if st.session_state.latest_plot_bytes is not None:
                 st.markdown('<div class="shap-plot-frame">', unsafe_allow_html=True)
