@@ -2,7 +2,6 @@ import io
 import os
 import tempfile
 import warnings
-import hashlib
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -157,22 +156,29 @@ def reset_prediction_state():
 
 
 def get_uploaded_file_signature(uploaded_file):
+    """Return a stable signature for the current uploaded file, or None when no file is present."""
     if uploaded_file is None:
         return None
 
     try:
         file_bytes = uploaded_file.getvalue()
     except Exception:
-        current_pos = uploaded_file.tell()
-        uploaded_file.seek(0)
-        file_bytes = uploaded_file.read()
-        uploaded_file.seek(current_pos)
+        try:
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.read()
+        except Exception:
+            file_bytes = b""
 
-    return (
-        getattr(uploaded_file, "name", None),
-        len(file_bytes),
-        hashlib.md5(file_bytes).hexdigest(),
-    )
+    import hashlib
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+    signature = f"{uploaded_file.name}|{len(file_bytes)}|{file_hash}"
+
+    try:
+        uploaded_file.seek(0)
+    except Exception:
+        pass
+
+    return signature
 
 
 def clear_status_messages_on_new_upload(training_file, prediction_file):
@@ -181,16 +187,20 @@ def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_signature = get_uploaded_file_signature(training_file)
     current_prediction_signature = get_uploaded_file_signature(prediction_file)
 
-    # Clear training messages only when the uploaded training file itself changed.
-    if training_file is not None and current_training_signature != st.session_state.last_training_file_signature:
+    # Clear training messages only when the training upload actually changes or is removed.
+    if current_training_signature != st.session_state.last_training_file_signature:
         st.session_state.train_success_message = ""
         st.session_state.last_training_file_name = current_training_name
         st.session_state.last_training_file_signature = current_training_signature
 
-    # Clear prediction results and SHAP outputs only when the uploaded prediction file itself changed.
-    # This keeps the page stable during normal Streamlit reruns from selectboxes and buttons.
-    if prediction_file is not None and current_prediction_signature != st.session_state.last_prediction_file_signature:
-        reset_prediction_state()
+    # Clear all prediction and SHAP outputs when the prediction upload changes OR is removed.
+    if current_prediction_signature != st.session_state.last_prediction_file_signature:
+        st.session_state.predict_df = None
+        st.session_state.prediction_file = None
+        st.session_state.prediction_status = ""
+        st.session_state.explain_status = ""
+        st.session_state.latest_explanation = None
+        st.session_state.latest_plot_bytes = None
         st.session_state.last_prediction_file_name = current_prediction_name
         st.session_state.last_prediction_file_signature = current_prediction_signature
 
@@ -789,7 +799,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
     st.session_state.prediction_status = (
-        f"✅ Predictions generated successfully for {len(result_df)} number of records."
+        f"✅ Predictions generated successfully for {len(result_df)} records."
     )
 
     return result_df
@@ -1076,33 +1086,23 @@ with predict_tab:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
                     st.error(prediction_validation_message)
 
-            submit_prediction = st.button(
-                "Submit File for Predictions",
-                width="stretch",
-                disabled=(prediction_file is None or not prediction_file_is_valid),
-            )
-
-            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
-                try:
-                    # Re-read from the uploaded file to avoid any file-pointer issues
-                    prediction_file.seek(0)
-                    prediction_df_for_prediction = pd.read_csv(prediction_file)
-                    prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
-                    generate_predictions(prediction_df_for_prediction)
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
-
             if st.session_state.prediction_status:
                 if st.session_state.prediction_status.startswith("✅"):
                     st.success(st.session_state.prediction_status)
                 else:
                     st.error(st.session_state.prediction_status)
 
+            submit_prediction = st.button(
+                "Submit File for Predictions",
+                width="stretch",
+                disabled=(prediction_file is None or not prediction_file_is_valid),
+            )
+
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
                     st.download_button(
                         "📥 Download Prediction Results",
-                        data=f.read(),
+                        data=f,
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
                         width="stretch",
@@ -1122,6 +1122,14 @@ with predict_tab:
             if clear_prediction:
                 reset_prediction_state()
                 st.rerun()
+
+            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
+                try:
+                    generate_predictions(prediction_df_preview)
+                    st.rerun()
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
+                    st.rerun()
 
         with pred_col2:
             st.markdown("### Prediction Results")
@@ -1160,7 +1168,6 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
-                    key="shap_student_id_select",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
