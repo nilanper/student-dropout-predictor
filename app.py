@@ -151,6 +151,15 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
+
+
+def on_training_file_change():
+    reset_training_state()
+
+
+def on_prediction_file_change():
+    reset_prediction_state()
+
 def get_model_status_text() -> str:
     if st.session_state.is_trained:
         return "✅ Model status: Trained successfully. This Tab is ready for prediction and SHAP explanations."
@@ -746,7 +755,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
-    st.session_state.prediction_status = f"✅ Predictions generated for {len(result_df)} students."
+    st.session_state.prediction_status = f"✅ Predictions generated successfully for {len(result_df)} records."
 
     return result_df
 
