@@ -61,6 +61,10 @@ def init_state():
         "train_success_message": "",
         "prediction_status": "",
         "explain_status": "",
+        "last_training_file_name": None,
+        "last_prediction_file_name": None,
+        "training_file_token": None,
+        "prediction_file_token": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -114,21 +118,6 @@ st.markdown(
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
-
-    button[kind="secondary"] {
-        white-space: nowrap !important;
-        width: auto !important;
-        padding-left: 12px !important;
-        padding-right: 12px !important;
-    }
-
-    div.stButton > button,
-    div.stDownloadButton > button {
-        width: 220px !important;
-        display: block;
-        margin-left: auto;
-        margin-right: auto;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -166,14 +155,42 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
+def get_uploaded_file_token(uploaded_file):
+    if uploaded_file is None:
+        return None
+    try:
+        content = uploaded_file.getvalue()
+        return (uploaded_file.name, len(content), hash(content))
+    except Exception:
+        return (uploaded_file.name,)
 
 
-def on_training_file_change():
-    reset_training_state()
+def sync_prediction_uploader_state(prediction_file):
+    current_token = get_uploaded_file_token(prediction_file)
+    previous_token = st.session_state.get("prediction_file_token")
+
+    if current_token != previous_token:
+        reset_prediction_state()
+        st.session_state.prediction_file_token = current_token
 
 
-def on_prediction_file_change():
-    reset_prediction_state()
+def clear_status_messages_on_new_upload(training_file, prediction_file):
+    current_training_name = training_file.name if training_file is not None else None
+    current_prediction_name = prediction_file.name if prediction_file is not None else None
+
+    if current_training_name != st.session_state.last_training_file_name:
+        st.session_state.train_success_message = ""
+        st.session_state.last_training_file_name = current_training_name
+
+    if current_prediction_name != st.session_state.last_prediction_file_name:
+        st.session_state.predict_df = None
+        st.session_state.prediction_file = None
+        st.session_state.prediction_status = ""
+        st.session_state.explain_status = ""
+        st.session_state.latest_explanation = None
+        st.session_state.latest_plot_bytes = None
+        st.session_state.last_prediction_file_name = current_prediction_name
+
 
 def get_model_status_text() -> str:
     if st.session_state.is_trained:
@@ -330,11 +347,9 @@ def validate_prediction_columns(df: pd.DataFrame) -> Tuple[bool, str, List[str],
 
     if missing_cols or extra_cols:
         message = (
-            "**Upload file incompatibility:**  \n"
             "The uploaded student file does not match the columns expected by the current model. "
             "Some required columns may be missing, or the file may contain different columns from the training data file. "
-            "Please upload a student file with the same columns as the training file, or retrain the model using matching training data file.\n\n"
-            "**Following are the incompatibilities:**"
+            "Please upload a student file with the same columns as the training file, or retrain the model using matching training data file."
         )
         return False, message, missing_cols, extra_cols
 
@@ -770,7 +785,9 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
-    st.session_state.prediction_status = f"✅ Predictions generated successfully for {len(result_df)} records."
+    st.session_state.prediction_status = (
+        f"✅ Predictions generated successfully for {len(result_df)} records."
+    )
 
     return result_df
 
@@ -844,8 +861,8 @@ with train_tab:
             "📄 Upload Labeled Training CSV",
             type=["csv"],
             key="training_file_uploader",
-            on_change=on_training_file_change,
         )
+        clear_status_messages_on_new_upload(training_file, None)
 
         target_column = None
         student_id_column = None
@@ -905,7 +922,7 @@ with train_tab:
                     index=0,
                 )
 
-                train_button = st.button("🚀 Train Model", width="stretch")
+                train_button = st.button("🚀 Train Model")
                 training_status_placeholder = st.empty()
 
                 if train_button:
@@ -955,53 +972,31 @@ with train_tab:
                 and len(st.session_state.model_comparison_df) > 1
             ):
                 st.markdown("### Model Comparison")
-                st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
+                st.dataframe(st.session_state.model_comparison_df, hide_index=True)
 
-          st.markdown("### Global SHAP Summary")
-plot_col1, plot_col2 = st.columns(2)
+            st.markdown("### Global SHAP Summary")
 
-# =========================
-# Feature Importance Plot
-# =========================
-with plot_col1:
-    col_left, col_center, col_right = st.columns([3, 2, 1])
+            plot_col1, plot_col2 = st.columns(2)
 
-    with col_left:
-        st.markdown("**Feature Importance Plot**")
-
-    with col_center:
-        st.write("")
-        st.write("")
-        with st.popover("ℹ️ How to read this chart"):
-            st.markdown("""
+            with plot_col1:
+                with st.popover("How to read this chart"):
+                    st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
 - Longer bars mean a factor has a **stronger influence**
 - Features at the top are the **most important**
 
-This chart shows **importance only**, not direction.
+This chart shows **importance only**, not whether a factor increases or decreases risk.
 """)
+                st.markdown("**Feature Importance Plot**")
+                if st.session_state.global_importance_plot_bytes is not None:
+                    st.image(st.session_state.global_importance_plot_bytes)
+                else:
+                    st.info("Feature importance plot will appear here after model training.")
 
-    if st.session_state.global_importance_plot_bytes is not None:
-        st.image(st.session_state.global_importance_plot_bytes, width="stretch")
-    else:
-        st.info("Feature importance plot will appear here after model training.")
-
-
-# =========================
-# Summary Plot
-# =========================
-with plot_col2:
-    col_left, col_center, col_right = st.columns([3, 2, 1])
-
-    with col_left:
-        st.markdown("**Summary Plot**")
-
-    with col_center:
-        st.write("")
-        st.write("")
-        with st.popover("ℹ️ How to read this chart"):
-            st.markdown("""
+            with plot_col2:
+                with st.popover("How to read this chart"):
+                    st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
@@ -1011,11 +1006,11 @@ This chart shows how different factors influence dropout risk **across all stude
 Dots to the **right** tend to increase dropout risk.  
 Dots to the **left** tend to decrease dropout risk.
 """)
-
-    if st.session_state.global_summary_plot_bytes is not None:
-        st.image(st.session_state.global_summary_plot_bytes, width="stretch")
-    else:
-        st.info("Summary plot will appear here after model training.")
+                st.markdown("**Summary Plot**")
+                if st.session_state.global_summary_plot_bytes is not None:
+                    st.image(st.session_state.global_summary_plot_bytes)
+                else:
+                    st.info("Summary plot will appear here after model training.")
         else:
             st.info("Model performance metrics and global SHAP plots will appear here after model training.")
 
@@ -1036,8 +1031,8 @@ with predict_tab:
                 "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
-                on_change=on_prediction_file_change,
             )
+            sync_prediction_uploader_state(prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
@@ -1049,6 +1044,7 @@ with predict_tab:
                 try:
                     prediction_df_preview = pd.read_csv(prediction_file)
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
+
                     prediction_file_is_valid, prediction_validation_message, missing_cols, extra_cols = (
                         validate_prediction_columns(prediction_df_preview)
                     )
@@ -1057,48 +1053,47 @@ with predict_tab:
                         st.session_state.prediction_status = "Upload successful. File is compatible with the model."
                     elif not prediction_file_is_valid:
                         st.session_state.prediction_status = f"❌ {prediction_validation_message}"
+
                 except Exception as e:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
                     st.session_state.prediction_status = f"❌ {prediction_validation_message}"
                     prediction_file_is_valid = False
 
-            prediction_status_placeholder = st.empty()
             if st.session_state.prediction_status:
                 if st.session_state.prediction_status.startswith("❌"):
-                    prediction_status_placeholder.error(st.session_state.prediction_status)
+                    st.error(st.session_state.prediction_status)
                 else:
-                    prediction_status_placeholder.success(st.session_state.prediction_status)
+                    st.success(st.session_state.prediction_status)
 
             if prediction_file is not None and not prediction_file_is_valid:
                 if missing_cols:
-                    st.markdown(f"**Missing required columns:** {', '.join(missing_cols)}")
+                    st.markdown("**Missing columns**")
+                    st.markdown(
+                        f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(missing_cols)}</div>",
+                        unsafe_allow_html=True,
+                    )
 
                 if extra_cols:
                     st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-                    st.markdown(f"**Different / unexpected columns in uploaded file:** {', '.join(extra_cols)}")
+                    st.markdown("**Different / unexpected columns in uploaded file**")
+                    st.markdown(
+                        f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
+                        unsafe_allow_html=True,
+                    )
 
             submit_prediction = st.button(
                 "Submit File for Predictions",
-                width="stretch",
                 disabled=(prediction_file is None or not prediction_file_is_valid),
             )
 
             if submit_prediction:
-                if prediction_file is None or not prediction_file_is_valid:
-                    st.session_state.prediction_status = "❌ Please upload a valid compatible file before generating predictions."
-                    prediction_status_placeholder.error(st.session_state.prediction_status)
-                else:
-                    try:
-                        prediction_file.seek(0)
-                        prediction_df_for_prediction = pd.read_csv(prediction_file)
-                        prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
-                        result_df = generate_predictions(prediction_df_for_prediction)
-                        prediction_status_placeholder.success(
-                            f"✅ Predictions generated successfully for {len(result_df)} records."
-                        )
-                    except Exception as e:
-                        st.session_state.prediction_status = f"❌ {e}"
-                        prediction_status_placeholder.error(st.session_state.prediction_status)
+                try:
+                    prediction_file.seek(0)
+                    fresh_prediction_df = pd.read_csv(prediction_file)
+                    fresh_prediction_df.columns = fresh_prediction_df.columns.str.strip()
+                    generate_predictions(fresh_prediction_df)
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
 
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
@@ -1107,7 +1102,6 @@ with predict_tab:
                         data=f.read(),
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
-                        width="stretch",
                     )
             else:
                 st.button(
@@ -1118,7 +1112,6 @@ with predict_tab:
 
             clear_prediction = st.button(
                 "Clear Prediction Results",
-                width="stretch",
             )
 
             if clear_prediction:
@@ -1145,7 +1138,7 @@ with predict_tab:
                     st.session_state.predict_df[preview_cols].copy()
                     if preview_cols else st.session_state.predict_df.copy()
                 )
-                st.dataframe(preview_df, width="stretch", height=280)
+                st.dataframe(preview_df, height=280)
             else:
                 st.info("Prediction results will appear here after you upload a file and submit it for predictions.")
 
@@ -1162,14 +1155,13 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
-                    key="selected_student_id",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
                 selected_student_id = typed_student_id
 
-            explain_clicked = st.button("🔎 Explain Prediction", width="stretch")
-            clear_shap_clicked = st.button("Clear SHAP Section", width="stretch")
+            explain_clicked = st.button("🔎 Explain Prediction")
+            clear_shap_clicked = st.button("Clear SHAP Section")
 
             if clear_shap_clicked:
                 st.session_state.latest_explanation = None
@@ -1209,27 +1201,20 @@ with predict_tab:
                 )
 
         with shap_col2:
-            title_col, help_col = st.columns([6, 2])
-            with title_col:
-                st.markdown("### Individual SHAP Waterfall Plot")
-            with help_col:
-                st.markdown("<div style='display:flex; justify-content:flex-end;'>", unsafe_allow_html=True)
-                with st.popover("ℹ️ How to read this chart"):
-                    st.markdown("""
-This plot explains **why this specific student** was predicted as Dropout or No Dropout.
-
-- Bars pushing to the **right** increase dropout risk
-- Bars pushing to the **left** decrease dropout risk
-- Larger bars mean a **stronger effect**
-- The final prediction is based on the combined effect of all displayed factors
-""")
-                st.markdown("</div>", unsafe_allow_html=True)
-
             if st.session_state.latest_plot_bytes is not None:
+                with st.popover("How to read this chart"):
+                    st.markdown("""
+Start from the **average dropout risk**.
+
+- 🔴 Red factors push the student's risk **higher**
+- 🔵 Blue factors push the student's risk **lower**
+
+The final value is **this student's predicted dropout risk**.
+""")
                 st.markdown('<div class="shap-plot-frame">', unsafe_allow_html=True)
                 plot_container = st.container(height=760, border=False)
                 with plot_container:
-                    st.image(st.session_state.latest_plot_bytes, width="stretch")
+                    st.image(st.session_state.latest_plot_bytes)
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
