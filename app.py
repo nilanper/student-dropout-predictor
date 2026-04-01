@@ -153,6 +153,14 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
+def on_training_file_change():
+    reset_training_state()
+
+
+def on_prediction_file_change():
+    reset_prediction_state()
+
+
 def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_name = training_file.name if training_file is not None else None
     current_prediction_name = prediction_file.name if prediction_file is not None else None
@@ -836,8 +844,8 @@ with train_tab:
             "📄 Upload Labeled Training CSV",
             type=["csv"],
             key="training_file_uploader",
+            on_change=on_training_file_change,
         )
-        clear_status_messages_on_new_upload(training_file, None)
 
         target_column = None
         student_id_column = None
@@ -1010,8 +1018,8 @@ with predict_tab:
                 "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
+                on_change=on_prediction_file_change,
             )
-            clear_status_messages_on_new_upload(None, prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
@@ -1068,15 +1076,27 @@ with predict_tab:
                 disabled=(prediction_file is None or not prediction_file_is_valid),
             )
 
+            if submit_prediction and prediction_file is not None and prediction_file_is_valid:
+                try:
+                    prediction_file.seek(0)
+                    prediction_df_for_prediction = pd.read_csv(prediction_file)
+                    prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
+                    generate_predictions(prediction_df_for_prediction)
+                    prediction_status_placeholder.success(st.session_state.prediction_status)
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
+                    prediction_status_placeholder.error(st.session_state.prediction_status)
+
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
-                    st.download_button(
-                        "📥 Download Prediction Results",
-                        data=f,
-                        file_name="student_dropout_predictions.csv",
-                        mime="text/csv",
-                        width="stretch",
-                    )
+                    prediction_bytes = f.read()
+                st.download_button(
+                    "📥 Download Prediction Results",
+                    data=prediction_bytes,
+                    file_name="student_dropout_predictions.csv",
+                    mime="text/csv",
+                    width="stretch",
+                )
             else:
                 st.button(
                     "📥 Download Prediction Results",
@@ -1092,15 +1112,6 @@ with predict_tab:
             if clear_prediction:
                 reset_prediction_state()
                 st.rerun()
-
-            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
-                try:
-                    prediction_file.seek(0)
-                    prediction_df_for_prediction = pd.read_csv(prediction_file)
-                    prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
-                    generate_predictions(prediction_df_for_prediction)
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
 
         with pred_col2:
             st.markdown("### Prediction Results")
