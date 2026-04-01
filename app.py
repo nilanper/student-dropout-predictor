@@ -957,61 +957,65 @@ with train_tab:
                 st.markdown("### Model Comparison")
                 st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
 
-            st.markdown("### Global SHAP Summary")
+          st.markdown("### Global SHAP Summary")
+plot_col1, plot_col2 = st.columns(2)
 
-            plot_col1, plot_col2 = st.columns(2)
+# =========================
+# Feature Importance Plot
+# =========================
+with plot_col1:
+    col_left, col_center, col_right = st.columns([3, 2, 1])
 
-            with plot_col1:
-                col_left, col_center, col_right = st.columns([3, 2, 1])
+    with col_left:
+        st.markdown("**Feature Importance Plot**")
 
-            with col_left:
-                    st.markdown("**Feature Importance Plot**")
-                
-                with col_center:
-                    st.write("")  # spacing
-                    st.write("")
-                    st.write("")
-                    
-                    with st.popover("ℹ️ How to read this chart"):
-                        st.markdown("""
-                This chart shows the **most important factors** affecting dropout risk overall.
-                
-                - Longer bars mean a factor has a **stronger influence**
-                - Features at the top are the **most important**
-                
-                This chart shows **importance only**, not direction.
-                """)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                if st.session_state.global_importance_plot_bytes is not None:
-                    st.image(st.session_state.global_importance_plot_bytes, width="stretch")
-                else:
-                    st.info("Feature importance plot will appear here after model training.")
+    with col_center:
+        st.write("")
+        st.write("")
+        with st.popover("ℹ️ How to read this chart"):
+            st.markdown("""
+This chart shows the **most important factors** affecting dropout risk overall.
 
-            with plot_col2:
-                col_left, col_center, col_right = st.columns([3, 2, 1])
+- Longer bars mean a factor has a **stronger influence**
+- Features at the top are the **most important**
 
-            with col_left:
-                    st.markdown("**Summary Plot**")
-                with col_center:
-                    st.write("")  # spacing
-                    st.write("")
-                    st.write("")
-                    with st.popover("ℹ️ How to read this chart"):
-                        st.markdown("""
-                This chart shows how different factors influence dropout risk **across all students**.
-                
-                - Each dot represents **one student**
-                - Red dots usually indicate **higher feature values**
-                - Blue dots usually indicate **lower feature values**
-                
-                Dots to the **right** tend to increase dropout risk.  
-                Dots to the **left** tend to decrease dropout risk.
-                """)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                if st.session_state.global_summary_plot_bytes is not None:
-                    st.image(st.session_state.global_summary_plot_bytes, width="stretch")
-                else:
-                    st.info("Summary plot will appear here after model training.")
+This chart shows **importance only**, not direction.
+""")
+
+    if st.session_state.global_importance_plot_bytes is not None:
+        st.image(st.session_state.global_importance_plot_bytes, width="stretch")
+    else:
+        st.info("Feature importance plot will appear here after model training.")
+
+
+# =========================
+# Summary Plot
+# =========================
+with plot_col2:
+    col_left, col_center, col_right = st.columns([3, 2, 1])
+
+    with col_left:
+        st.markdown("**Summary Plot**")
+
+    with col_center:
+        st.write("")
+        st.write("")
+        with st.popover("ℹ️ How to read this chart"):
+            st.markdown("""
+This chart shows how different factors influence dropout risk **across all students**.
+
+- Each dot represents **one student**
+- Red dots usually indicate **higher feature values**
+- Blue dots usually indicate **lower feature values**
+
+Dots to the **right** tend to increase dropout risk.  
+Dots to the **left** tend to decrease dropout risk.
+""")
+
+    if st.session_state.global_summary_plot_bytes is not None:
+        st.image(st.session_state.global_summary_plot_bytes, width="stretch")
+    else:
+        st.info("Summary plot will appear here after model training.")
         else:
             st.info("Model performance metrics and global SHAP plots will appear here after model training.")
 
