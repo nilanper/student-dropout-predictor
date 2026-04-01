@@ -2,6 +2,7 @@ import io
 import os
 import tempfile
 import warnings
+import hashlib
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -63,6 +64,8 @@ def init_state():
         "explain_status": "",
         "last_training_file_name": None,
         "last_prediction_file_name": None,
+        "last_training_file_signature": None,
+        "last_prediction_file_signature": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -153,27 +156,43 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
+def get_uploaded_file_signature(uploaded_file):
+    if uploaded_file is None:
+        return None
+
+    try:
+        file_bytes = uploaded_file.getvalue()
+    except Exception:
+        current_pos = uploaded_file.tell()
+        uploaded_file.seek(0)
+        file_bytes = uploaded_file.read()
+        uploaded_file.seek(current_pos)
+
+    return (
+        getattr(uploaded_file, "name", None),
+        len(file_bytes),
+        hashlib.md5(file_bytes).hexdigest(),
+    )
+
+
 def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_name = training_file.name if training_file is not None else None
     current_prediction_name = prediction_file.name if prediction_file is not None else None
+    current_training_signature = get_uploaded_file_signature(training_file)
+    current_prediction_signature = get_uploaded_file_signature(prediction_file)
 
-    # Only clear training messages when a newly uploaded training file is actually present.
-    # This prevents unrelated widget interactions from wiping status during normal reruns.
-    if training_file is not None and current_training_name != st.session_state.last_training_file_name:
+    # Clear training messages only when the uploaded training file itself changed.
+    if training_file is not None and current_training_signature != st.session_state.last_training_file_signature:
         st.session_state.train_success_message = ""
         st.session_state.last_training_file_name = current_training_name
+        st.session_state.last_training_file_signature = current_training_signature
 
-    # Only clear prediction outputs when a newly uploaded prediction file is actually present.
-    # Selecting a Student ID in the SHAP section also triggers a rerun, and we should keep
-    # the current prediction table and SHAP state intact during that rerun.
-    if prediction_file is not None and current_prediction_name != st.session_state.last_prediction_file_name:
-        st.session_state.predict_df = None
-        st.session_state.prediction_file = None
-        st.session_state.prediction_status = ""
-        st.session_state.explain_status = ""
-        st.session_state.latest_explanation = None
-        st.session_state.latest_plot_bytes = None
+    # Clear prediction results and SHAP outputs only when the uploaded prediction file itself changed.
+    # This keeps the page stable during normal Streamlit reruns from selectboxes and buttons.
+    if prediction_file is not None and current_prediction_signature != st.session_state.last_prediction_file_signature:
+        reset_prediction_state()
         st.session_state.last_prediction_file_name = current_prediction_name
+        st.session_state.last_prediction_file_signature = current_prediction_signature
 
 
 def get_model_status_text() -> str:
