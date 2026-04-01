@@ -947,7 +947,7 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                title_col, help_col = st.columns([6, 1])
+                title_col, help_col = st.columns([5, 2])
                 with title_col:
                     st.markdown("**Feature Importance Plot**")
                 with help_col:
@@ -966,7 +966,7 @@ This chart shows **importance only**, not whether a factor increases or decrease
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                title_col, help_col = st.columns([6, 1])
+                title_col, help_col = st.columns([5, 2])
                 with title_col:
                     st.markdown("**Summary Plot**")
                 with help_col:
@@ -1178,7 +1178,7 @@ with predict_tab:
                 )
 
         with shap_col2:
-            title_col, help_col = st.columns([6, 1])
+            title_col, help_col = st.columns([5, 2])
             with title_col:
                 st.markdown("### Individual SHAP Waterfall Plot")
             with help_col:
