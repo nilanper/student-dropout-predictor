@@ -45,6 +45,7 @@ def init_state():
         "model": None,
         "preprocessor": None,
         "feature_columns": None,
+        "training_file_columns_original": None,
         "target_column": None,
         "student_id_column": None,
         "student_name_column": None,
@@ -128,6 +129,7 @@ def reset_training_state():
     st.session_state.model = None
     st.session_state.preprocessor = None
     st.session_state.feature_columns = None
+    st.session_state.training_file_columns_original = None
     st.session_state.target_column = None
     st.session_state.student_id_column = None
     st.session_state.student_name_column = None
@@ -306,10 +308,19 @@ def guess_target_column(columns: List[str]) -> str:
     return columns[0] if columns else None
 
 
-def validate_prediction_columns(df: pd.DataFrame, required_columns: List[str]):
-    uploaded_cols = df.columns.tolist()
-    missing_cols = [col for col in required_columns if col not in uploaded_cols]
-    extra_cols = [col for col in uploaded_cols if col not in required_columns]
+def validate_prediction_columns(df: pd.DataFrame) -> Tuple[bool, str, List[str], List[str]]:
+    if st.session_state.training_file_columns_original is None:
+        return False, "The model training column structure is not available. Please retrain the model.", [], []
+
+    uploaded_cols = [col.strip() for col in df.columns.tolist()]
+    training_cols = [col.strip() for col in st.session_state.training_file_columns_original]
+
+    target_col = st.session_state.target_column.strip() if st.session_state.target_column else None
+
+    expected_cols = [col for col in training_cols if col != target_col]
+
+    missing_cols = [col for col in expected_cols if col not in uploaded_cols]
+    extra_cols = [col for col in uploaded_cols if col not in expected_cols]
 
     if missing_cols or extra_cols:
         message = (
@@ -599,6 +610,7 @@ def train_institution_model(
     reset_training_state()
     df = df.copy()
     df.columns = df.columns.str.strip()
+    original_training_columns = df.columns.tolist()
 
     if df.empty:
         raise ValueError("The uploaded training file is empty.")
@@ -701,6 +713,7 @@ def train_institution_model(
     st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
     st.session_state.feature_columns = X.columns.tolist()
+    st.session_state.training_file_columns_original = original_training_columns
     st.session_state.target_column = target_column
     st.session_state.student_id_column = student_id_column if student_id_column in df.columns else None
     st.session_state.student_name_column = student_name_column if student_name_column in df.columns else None
@@ -733,7 +746,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = df.columns.str.strip()
 
-    is_valid, validation_message, _, _ = validate_prediction_columns(df, st.session_state.feature_columns)
+    is_valid, validation_message, _, _ = validate_prediction_columns(df)
     if not is_valid:
         raise ValueError(validation_message)
 
@@ -1008,10 +1021,7 @@ with predict_tab:
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
 
                     prediction_file_is_valid, prediction_validation_message, missing_cols, extra_cols = (
-                        validate_prediction_columns(
-                            prediction_df_preview,
-                            st.session_state.feature_columns,
-                        )
+                        validate_prediction_columns(prediction_df_preview)
                     )
 
                     if prediction_file_is_valid:
@@ -1021,11 +1031,17 @@ with predict_tab:
 
                         if missing_cols:
                             st.markdown("**Missing columns**")
-                            st.markdown("\n".join([f"- {col}" for col in missing_cols]))
+                            st.markdown(
+                                f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(missing_cols)}</div>",
+                                unsafe_allow_html=True,
+                            )
 
                         if extra_cols:
                             st.markdown("**Different / unexpected columns in uploaded file**")
-                            st.markdown("\n".join([f"- {col}" for col in extra_cols]))
+                            st.markdown(
+                                f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
+                                unsafe_allow_html=True,
+                            )
 
                 except Exception as e:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
