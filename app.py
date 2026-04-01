@@ -765,7 +765,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
     st.session_state.prediction_status = (
-        f"✅ Predictions generated successfully for {len(result_df)} records."
+        f"✅ Predictions generated successfully for {len(result_df)} number of records."
     )
 
     return result_df
@@ -1052,23 +1052,33 @@ with predict_tab:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
                     st.error(prediction_validation_message)
 
-            if st.session_state.prediction_status:
-                if st.session_state.prediction_status.startswith("✅"):
-                    st.success(st.session_state.prediction_status)
-                else:
-                    st.error(st.session_state.prediction_status)
-
             submit_prediction = st.button(
                 "Submit File for Predictions",
                 width="stretch",
                 disabled=(prediction_file is None or not prediction_file_is_valid),
             )
 
+            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
+                try:
+                    # Re-read from the uploaded file to avoid any file-pointer issues
+                    prediction_file.seek(0)
+                    prediction_df_for_prediction = pd.read_csv(prediction_file)
+                    prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
+                    generate_predictions(prediction_df_for_prediction)
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
+
+            if st.session_state.prediction_status:
+                if st.session_state.prediction_status.startswith("✅"):
+                    st.success(st.session_state.prediction_status)
+                else:
+                    st.error(st.session_state.prediction_status)
+
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
                     st.download_button(
                         "📥 Download Prediction Results",
-                        data=f,
+                        data=f.read(),
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
                         width="stretch",
@@ -1088,14 +1098,6 @@ with predict_tab:
             if clear_prediction:
                 reset_prediction_state()
                 st.rerun()
-
-            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
-                try:
-                    generate_predictions(prediction_df_preview)
-                    st.rerun()
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
-                    st.rerun()
 
         with pred_col2:
             st.markdown("### Prediction Results")
