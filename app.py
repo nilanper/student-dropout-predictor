@@ -959,6 +959,7 @@ with train_tab:
                     st.markdown("**Feature Importance Plot**")
                 with help_col:
                     st.write("")
+                    st.write("")
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
