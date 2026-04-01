@@ -1138,28 +1138,30 @@ with predict_tab:
                 except Exception as e:
                     st.session_state.explain_status = f"❌ {e}"
 
-            if st.session_state.explain_status:
-                if st.session_state.explain_status.startswith("✅"):
-                    formatted_html = st.session_state.explain_status.replace("\n", "<br>")
-                    st.markdown(
-                        f"""
-                        <div style="padding:0.75rem 1rem; border-radius:0.5rem; background:#d1fae5; color:#065f46;">
-                            {formatted_html}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.error(st.session_state.explain_status)
+           # Download button FIRST
+if st.session_state.latest_plot_bytes:
+    st.download_button(
+        "📥 Download Explanation Plot",
+        data=st.session_state.latest_plot_bytes,
+        file_name="student_shap_waterfall.png",
+        mime="image/png",
+        use_container_width=True,
+    )
 
-            if st.session_state.latest_plot_bytes:
-                st.download_button(
-                    "📥 Download Explanation Plot",
-                    data=st.session_state.latest_plot_bytes,
-                    file_name="student_shap_waterfall.png",
-                    mime="image/png",
-                    use_container_width=True,
-                )
+# THEN the status message
+if st.session_state.explain_status:
+    if st.session_state.explain_status.startswith("✅"):
+        formatted_html = st.session_state.explain_status.replace("\n", "<br>")
+        st.markdown(
+            f"""
+            <div style="padding:0.75rem 1rem; border-radius:0.5rem; background:#d1fae5; color:#065f46;">
+                {formatted_html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.error(st.session_state.explain_status)
 
         with shap_col2:
             render_centered_chart_help(
