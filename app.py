@@ -954,7 +954,7 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                col_left, col_center, col_right = st.columns([1, 2, 1])
+                col_left, col_center, col_right = st.columns([3, 2, 1])
 
                 with col_left:
                     st.markdown("**Feature Importance Plot**")
