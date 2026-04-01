@@ -332,10 +332,11 @@ def validate_prediction_columns(df: pd.DataFrame) -> Tuple[bool, str, List[str],
 
     if missing_cols or extra_cols:
         message = (
-            "**Upload file incompatibility:** The uploaded student file does not match the columns expected by the current model. "
+            "**Upload file incompatibility:**" 
+            " The uploaded student file does not match the columns expected by the current model. "
             "Some required columns may be missing, or the file may contain different columns from the training data file. "
             "Please upload a student file with the same columns as the training file, or retrain the model using matching training data file."
-            "**Following are the incompatibilities;"
+            "**Following are the incompatibilities;**"
         )
         return False, message, missing_cols, extra_cols
 
