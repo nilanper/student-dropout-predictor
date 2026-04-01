@@ -951,7 +951,7 @@ with train_tab:
                 with title_col:
                     st.markdown("**Feature Importance Plot**")
                 with help_col:
-                    with st.popover("ℹ️"):
+                    with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
@@ -970,7 +970,7 @@ This chart shows **importance only**, not whether a factor increases or decrease
                 with title_col:
                     st.markdown("**Summary Plot**")
                 with help_col:
-                    with st.popover("ℹ️"):
+                    with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
 
@@ -1182,7 +1182,7 @@ with predict_tab:
             with title_col:
                 st.markdown("### Individual SHAP Waterfall Plot")
             with help_col:
-                with st.popover("ℹ️"):
+                with st.popover("ℹ️ How to read this chart"):
                     st.markdown("""
 This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
