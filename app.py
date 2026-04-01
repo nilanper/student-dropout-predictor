@@ -1009,7 +1009,7 @@ with predict_tab:
             st.caption(f"Active model: {st.session_state.selected_model_name}")
 
         st.subheader("Upload & Predict")
-        pred_col1, pred_col2 = st.columns([1, 2])
+        pred_col1, pred_col2 = st.columns([1, 3])
 
         with pred_col1:
             prediction_file = st.file_uploader(
