@@ -962,6 +962,7 @@ with train_tab:
                 with col_center:
                     st.write("")  # spacing
                     st.write("")
+                    st.write("")
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
                 This chart shows the **most important factors** affecting dropout risk overall.
