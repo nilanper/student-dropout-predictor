@@ -956,7 +956,7 @@ with train_tab:
             with plot_col1:
                 col_left, col_center, col_right = st.columns([3, 2, 1])
 
-                with col_left:
+            with col_left:
                     st.markdown("**Feature Importance Plot**")
                 
                 with col_center:
@@ -980,9 +980,9 @@ with train_tab:
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                 col_left, col_center, col_right = st.columns([3, 2, 1])
+                col_left, col_center, col_right = st.columns([3, 2, 1])
 
-                with col_left:
+            with col_left:
                     st.markdown("**Summary Plot**")
                 with help_col:
                     with st.popover("ℹ️ How to read this chart"):
