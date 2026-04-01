@@ -63,8 +63,6 @@ def init_state():
         "explain_status": "",
         "last_training_file_name": None,
         "last_prediction_file_name": None,
-        "last_training_file_signature": None,
-        "last_prediction_file_signature": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -155,54 +153,20 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
-def get_uploaded_file_signature(uploaded_file):
-    """Return a stable signature for the current uploaded file, or None when no file is present."""
-    if uploaded_file is None:
-        return None
-
-    try:
-        file_bytes = uploaded_file.getvalue()
-    except Exception:
-        try:
-            uploaded_file.seek(0)
-            file_bytes = uploaded_file.read()
-        except Exception:
-            file_bytes = b""
-
-    import hashlib
-    file_hash = hashlib.md5(file_bytes).hexdigest()
-    signature = f"{uploaded_file.name}|{len(file_bytes)}|{file_hash}"
-
-    try:
-        uploaded_file.seek(0)
-    except Exception:
-        pass
-
-    return signature
-
-
 def clear_status_messages_on_new_upload(training_file, prediction_file):
     current_training_name = training_file.name if training_file is not None else None
     current_prediction_name = prediction_file.name if prediction_file is not None else None
-    current_training_signature = get_uploaded_file_signature(training_file)
-    current_prediction_signature = get_uploaded_file_signature(prediction_file)
 
-    # Clear training messages only when the training upload actually changes or is removed.
-    if current_training_signature != st.session_state.last_training_file_signature:
+    if current_training_name != st.session_state.last_training_file_name:
         st.session_state.train_success_message = ""
         st.session_state.last_training_file_name = current_training_name
-        st.session_state.last_training_file_signature = current_training_signature
 
-    # Clear all prediction and SHAP outputs when the prediction upload changes OR is removed.
-    if current_prediction_signature != st.session_state.last_prediction_file_signature:
-        st.session_state.predict_df = None
-        st.session_state.prediction_file = None
+    if current_prediction_name != st.session_state.last_prediction_file_name:
         st.session_state.prediction_status = ""
         st.session_state.explain_status = ""
         st.session_state.latest_explanation = None
         st.session_state.latest_plot_bytes = None
         st.session_state.last_prediction_file_name = current_prediction_name
-        st.session_state.last_prediction_file_signature = current_prediction_signature
 
 
 def get_model_status_text() -> str:
@@ -798,9 +762,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
-    st.session_state.prediction_status = (
-        f"✅ Predictions generated successfully for {len(result_df)} records."
-    )
+    st.session_state.prediction_status = f"✅ Predictions generated for {len(result_df)} students."
 
     return result_df
 
@@ -1075,7 +1037,6 @@ with predict_tab:
                             )
 
                         if extra_cols:
-                            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
                             st.markdown("**Different / unexpected columns in uploaded file**")
                             st.markdown(
                                 f"<div style='font-size:0.95rem; line-height:1.5;'>{', '.join(extra_cols)}</div>",
