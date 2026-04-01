@@ -980,22 +980,22 @@ with train_tab:
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-               col_left, col_center, col_right = st.columns([3, 2, 1])
+                 col_left, col_center, col_right = st.columns([3, 2, 1])
 
-                with col_left:
+                    with col_left:
                     st.markdown("**Summary Plot**")
-                with help_col:
+                    with help_col:
                     with st.popover("ℹ️ How to read this chart"):
                         st.markdown("""
-This chart shows how different factors influence dropout risk **across all students**.
-
-- Each dot represents **one student**
-- Red dots usually indicate **higher feature values**
-- Blue dots usually indicate **lower feature values**
-
-Dots to the **right** tend to increase dropout risk.  
-Dots to the **left** tend to decrease dropout risk.
-""")
+                This chart shows how different factors influence dropout risk **across all students**.
+                
+                - Each dot represents **one student**
+                - Red dots usually indicate **higher feature values**
+                - Blue dots usually indicate **lower feature values**
+                
+                Dots to the **right** tend to increase dropout risk.  
+                Dots to the **left** tend to decrease dropout risk.
+                """)
                     st.markdown("</div>", unsafe_allow_html=True)
                 if st.session_state.global_summary_plot_bytes is not None:
                     st.image(st.session_state.global_summary_plot_bytes, width="stretch")
