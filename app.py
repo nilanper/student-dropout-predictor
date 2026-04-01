@@ -61,6 +61,8 @@ def init_state():
         "train_success_message": "",
         "prediction_status": "",
         "explain_status": "",
+        "last_training_file_name": None,
+        "last_prediction_file_name": None,
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
@@ -151,16 +153,23 @@ def reset_prediction_state():
     st.session_state.explain_status = ""
 
 
-def on_training_file_change():
-    reset_training_state()
+def clear_status_messages_on_new_upload(training_file, prediction_file):
+    current_training_name = training_file.name if training_file is not None else None
+    current_prediction_name = prediction_file.name if prediction_file is not None else None
 
+    if current_training_name != st.session_state.last_training_file_name:
+        st.session_state.train_success_message = ""
+        st.session_state.last_training_file_name = current_training_name
 
-def on_prediction_file_change():
-    reset_prediction_state()
+    if current_prediction_name != st.session_state.last_prediction_file_name:
+        st.session_state.prediction_status = ""
+        st.session_state.explain_status = ""
+        st.session_state.latest_explanation = None
+        st.session_state.latest_plot_bytes = None
+        st.session_state.last_prediction_file_name = current_prediction_name
 
 
 def get_model_status_text() -> str:
-
     if st.session_state.is_trained:
         return "✅ Model status: Trained successfully. This Tab is ready for prediction and SHAP explanations."
     return "⚠️ Model status: Not trained yet. Please complete model training in the first Tab before using this Tab"
@@ -753,9 +762,7 @@ def generate_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
     st.session_state.predict_df = result_df
     st.session_state.prediction_file = save_prediction_results(result_df)
-    st.session_state.prediction_status = (
-        f"✅ Predictions generated successfully for {len(result_df)} records."
-    )
+    st.session_state.prediction_status = f"✅ Predictions generated for {len(result_df)} students."
 
     return result_df
 
@@ -829,8 +836,8 @@ with train_tab:
             "📄 Upload Labeled Training CSV",
             type=["csv"],
             key="training_file_uploader",
-            on_change=on_training_file_change,
         )
+        clear_status_messages_on_new_upload(training_file, None)
 
         target_column = None
         student_id_column = None
@@ -947,8 +954,10 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                with st.popover("How to read this chart"):
-                    st.markdown("""
+                left, center, right = st.columns([1, 2, 1])
+                with center:
+                    with st.popover("How to read this chart"):
+                        st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
 - Longer bars mean a factor has a **stronger influence**
@@ -963,8 +972,10 @@ This chart shows **importance only**, not whether a factor increases or decrease
                     st.info("Feature importance plot will appear here after model training.")
 
             with plot_col2:
-                with st.popover("How to read this chart"):
-                    st.markdown("""
+                left, center, right = st.columns([1, 2, 1])
+                with center:
+                    with st.popover("How to read this chart"):
+                        st.markdown("""
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
@@ -999,14 +1010,16 @@ with predict_tab:
                 "📄 Upload new Student CSV File to get predictions",
                 type=["csv"],
                 key="prediction_file_uploader",
-                on_change=on_prediction_file_change,
             )
+            clear_status_messages_on_new_upload(None, prediction_file)
 
             prediction_df_preview = None
             prediction_file_is_valid = False
             prediction_validation_message = ""
             missing_cols = []
             extra_cols = []
+
+            prediction_status_placeholder = st.empty()
 
             if prediction_file is not None:
                 try:
@@ -1026,6 +1039,12 @@ with predict_tab:
                     prediction_validation_message = f"Unable to read the uploaded file: {e}"
                     st.session_state.prediction_status = f"❌ {prediction_validation_message}"
                     prediction_file_is_valid = False
+
+            if st.session_state.prediction_status:
+                if st.session_state.prediction_status.startswith("❌"):
+                    prediction_status_placeholder.error(st.session_state.prediction_status)
+                else:
+                    prediction_status_placeholder.success(st.session_state.prediction_status)
 
             if prediction_file is not None and not prediction_file_is_valid:
                 if missing_cols:
@@ -1049,26 +1068,11 @@ with predict_tab:
                 disabled=(prediction_file is None or not prediction_file_is_valid),
             )
 
-            if submit_prediction:
-                try:
-                    prediction_file.seek(0)
-                    fresh_prediction_df = pd.read_csv(prediction_file)
-                    fresh_prediction_df.columns = fresh_prediction_df.columns.str.strip()
-                    generate_predictions(fresh_prediction_df)
-                except Exception as e:
-                    st.session_state.prediction_status = f"❌ {e}"
-
-            if st.session_state.prediction_status:
-                if st.session_state.prediction_status.startswith("❌"):
-                    st.error(st.session_state.prediction_status)
-                else:
-                    st.success(st.session_state.prediction_status)
-
             if st.session_state.prediction_file and os.path.exists(st.session_state.prediction_file):
                 with open(st.session_state.prediction_file, "rb") as f:
                     st.download_button(
                         "📥 Download Prediction Results",
-                        data=f.read(),
+                        data=f,
                         file_name="student_dropout_predictions.csv",
                         mime="text/csv",
                         width="stretch",
@@ -1088,6 +1092,15 @@ with predict_tab:
             if clear_prediction:
                 reset_prediction_state()
                 st.rerun()
+
+            if prediction_file is not None and submit_prediction and prediction_file_is_valid:
+                try:
+                    prediction_file.seek(0)
+                    prediction_df_for_prediction = pd.read_csv(prediction_file)
+                    prediction_df_for_prediction.columns = prediction_df_for_prediction.columns.str.strip()
+                    generate_predictions(prediction_df_for_prediction)
+                except Exception as e:
+                    st.session_state.prediction_status = f"❌ {e}"
 
         with pred_col2:
             st.markdown("### Prediction Results")
@@ -1126,7 +1139,6 @@ with predict_tab:
                     "Select Student ID",
                     options=student_choices,
                     index=0,
-                    key="shap_student_id_select",
                 )
             else:
                 typed_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
