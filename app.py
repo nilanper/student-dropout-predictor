@@ -603,7 +603,7 @@ def get_student_id_choices_from_predictions() -> List[str]:
 
 def render_centered_chart_help(title: str, help_text: str, heading_level: int = 0):
     left_col, center_col, right_col = st.columns([3, 2, 1])
-        with left_col:
+    with left_col:
         st.markdown(f"### {title}")
     with center_col:
         st.write("")
