@@ -954,20 +954,22 @@ with train_tab:
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
-                title_col, help_col = st.columns([6, 2])
-                with title_col:
-                    st.markdown("**Feature Importance Plot**")
-                with help_col:
-                    st.write("")
-                    st.write("")
-                    with st.popover("ℹ️ How to read this chart"):
-                        st.markdown("""
+                col_left, col_center, col_right = st.columns([1, 2, 1])
+
+with col_left:
+    st.markdown("**Feature Importance Plot**")
+
+with col_center:
+    st.write("")  # spacing
+    st.write("")
+    with st.popover("ℹ️ How to read this chart"):
+        st.markdown("""
 This chart shows the **most important factors** affecting dropout risk overall.
 
 - Longer bars mean a factor has a **stronger influence**
 - Features at the top are the **most important**
 
-This chart shows **importance only**, not whether a factor increases or decreases risk.
+This chart shows **importance only**, not direction.
 """)
                     st.markdown("</div>", unsafe_allow_html=True)
                 if st.session_state.global_importance_plot_bytes is not None:
