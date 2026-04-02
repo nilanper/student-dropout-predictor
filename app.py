@@ -64,6 +64,7 @@ def init_state():
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
+        "global_shap_summary_text": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -156,6 +157,7 @@ def reset_training_state():
     st.session_state.train_success_message = ""
     st.session_state.selected_model_name = None
     st.session_state.model_comparison_df = None
+    st.session_state.global_shap_summary_text = ""
     reset_prediction_state()
 
 
@@ -739,6 +741,60 @@ def render_recommendation_box(student_id: str, recommendations):
     )
 
 
+def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarray, top_n: int = 5):
+    mean_abs = np.mean(np.abs(shap_values), axis=0)
+    mean_signed = np.mean(shap_values, axis=0)
+
+    feature_importance = list(zip(feature_names, mean_abs, mean_signed))
+    feature_importance.sort(key=lambda x: x[1], reverse=True)
+
+    top_features = feature_importance[:top_n]
+    increasing = [name for name, _, signed in feature_importance if signed > 0][:top_n]
+    reducing = [name for name, _, signed in feature_importance if signed < 0][:top_n]
+
+    def clean_name(name):
+        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ").strip()
+        return label
+
+    top_features_text = ", ".join(clean_name(name) for name, _, _ in top_features) if top_features else "no major factors"
+    increasing_text = ", ".join(clean_name(name) for name in increasing) if increasing else "no clear overall risk-increasing factors"
+    reducing_text = ", ".join(clean_name(name) for name in reducing) if reducing else "no clear overall risk-reducing factors"
+
+    summary_html = f"""
+    The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
+    Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
+    Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
+    Overall, these patterns suggest the institution should pay close attention to attendance, academic performance,
+    prior academic difficulty, and study behaviour when identifying students who may need support.
+    """
+
+    return summary_html
+
+
+def render_global_summary_box(summary_html: str):
+    st.markdown(
+        f"""
+        <div style="
+            padding: 0.9rem 1rem;
+            border-radius: 0.6rem;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        ">
+            <div style="font-weight: 700; margin-bottom: 0.45rem;">
+                SHAP Explanation - Overall Summary
+            </div>
+            <div style="line-height: 1.6;">
+                {summary_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 
 def train_institution_model(
     df: pd.DataFrame,
@@ -847,6 +903,18 @@ def train_institution_model(
         feature_names,
     )
 
+    global_shap_values_obj = global_explainer(X_shap_sample)
+    if hasattr(global_shap_values_obj, "values"):
+        global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
+    else:
+        global_shap_values = np.array(global_shap_values_obj)
+
+    global_shap_summary_text = generate_global_shap_summary(
+        feature_names,
+        global_shap_values,
+        top_n=5,
+    )
+
     render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
@@ -863,6 +931,7 @@ def train_institution_model(
     st.session_state.selected_model_name = best_model_name
     st.session_state.model_comparison_df = comparison_df
     st.session_state.selection_metric = selection_metric
+    st.session_state.global_shap_summary_text = global_shap_summary_text
 
     if model_choice == "Run all 4 and choose the best":
         st.session_state.train_success_message = (
@@ -1066,6 +1135,8 @@ with train_tab:
 
         if st.session_state.train_success_message:
             st.success(st.session_state.train_success_message)
+            if st.session_state.global_shap_summary_text:
+                render_global_summary_box(st.session_state.global_shap_summary_text)
 
     with col2:
         st.markdown("### Model Performance Metrics")
