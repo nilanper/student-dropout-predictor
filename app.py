@@ -662,14 +662,14 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
 
     summary_html = f"""
     This student was predicted as <b>{prediction_label}</b> with a dropout probability of <b>{prediction_prob}</b>.<br><br>
-    <b>Factors increasing dropout risk:</b> {increasing_text}<br>
+    <b>Factors increasing dropout risk:</b> {increasing_text}<br><br>
     <b>Factors reducing dropout risk:</b> {reducing_text}<br><br>
     """
 
     if str(prediction_label).lower() == "dropout":
-        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk."
+        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk which resulted in a <b>Dropout</b> prediction."
     else:
-        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
+        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk which resulted in a <b>No Dropout</b> prediction."
 
     return summary_html
 
@@ -723,7 +723,7 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         )
 
         for name, _ in risk_increasing:
-            feature_label = clean_name(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
                 f"{feature_label} appears to be contributing to this student’s dropout risk and may require closer attention."
             )
@@ -738,7 +738,7 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         )
 
         for name, _ in risk_increasing:
-            feature_label = clean_name(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
                 f"{feature_label} may warrant monitoring, as it is contributing to this student’s dropout risk."
             )
@@ -753,7 +753,7 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         )
 
         for name, _ in risk_reducing:
-            feature_label = clean_name(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
                 f"{feature_label} is contributing positively to this student’s outcome and should be sustained."
             )
