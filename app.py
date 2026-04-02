@@ -137,7 +137,7 @@ st.markdown(
 .app-hero {
     background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
     border-radius: 22px;
-    padding: 1.1rem 1.35rem 1.05rem 1.35rem;
+    padding: 1.8rem 1.35rem 1.05rem 1.35rem;
     color: white;
     box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
     margin-bottom: 0.55rem;
@@ -162,7 +162,7 @@ st.markdown(
 }
 
 .app-intro {
-    margin: 0.1rem 0 0.9rem 0.1rem;
+    margin: 0.1rem 0 0.9rem 1rem;
     font-size: 1rem;
     color: var(--text-muted);
     line-height: 1.45;
