@@ -130,7 +130,7 @@ st.markdown(
     padding-top: 1.05rem !important;
     padding-bottom: 1.5rem !important;
     max-width: none !important;
-    padding-left: 1.8rem !important;
+    padding-left: 2.4rem !important;
     padding-right: 1.8rem !important;
 }
 
@@ -1604,7 +1604,7 @@ with predict_tab:
             st.caption(f"Active model: {st.session_state.selected_model_name}")
 
         st.subheader("Upload & Predict")
-        pred_col1, pred_col2 = st.columns([1.05, 4.15])
+        pred_col1, pred_gap, pred_col2 = st.columns([1, 0.15, 3])
 
         with pred_col1:
             prediction_file = st.file_uploader(
@@ -1704,7 +1704,7 @@ with predict_tab:
 
         st.markdown("---")
         st.subheader("SHAP Explanation for a Specific Student")
-        shap_col1, shap_col2 = st.columns([1, 3])
+        shap_col1, shap_gap, shap_col2 = st.columns([1, 0.15, 3])
 
         with shap_col1:
             student_choices = get_student_id_choices_from_predictions()
