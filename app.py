@@ -904,7 +904,7 @@ def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarr
 
     summary_html = f"""
 The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
-Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
+Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br><br>
 Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
 {final_sentence}
 """
