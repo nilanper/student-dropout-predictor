@@ -602,6 +602,23 @@ def get_student_id_choices_from_predictions() -> List[str]:
     return []
 
 
+
+
+def render_centered_chart_help(title: str, help_text: str, heading_level: int = 0):
+    left_col, center_col, right_col = st.columns([3, 2, 1])
+    with left_col:
+        if heading_level == 3:
+            st.markdown(f"### {title}")
+        else:
+            st.markdown(f"**{title}**")
+    with center_col:
+        st.write("")
+        st.write("")
+        with st.popover("ℹ️ How to read this chart"):
+            st.markdown(help_text)
+    with right_col:
+        st.write("")
+
 def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, student_id, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
