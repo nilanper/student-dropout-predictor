@@ -674,7 +674,7 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
     return summary_html
 
 
-def generate_shap_recommendations(explanation, top_n=3):
+def generate_shap_recommendations(explanation, prediction_label, prediction_prob_value, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
 
@@ -682,6 +682,7 @@ def generate_shap_recommendations(explanation, top_n=3):
     items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
 
     risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
+    risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
 
     def clean_name(name):
         name = str(name).replace("num__", "").replace("cat__", "").strip()
@@ -705,7 +706,14 @@ def generate_shap_recommendations(explanation, top_n=3):
 
     recommendations = []
 
-    if risk_increasing:
+    try:
+        prob = float(prediction_prob_value)
+    except Exception:
+        prob = np.nan
+
+    label = str(prediction_label).strip().lower()
+
+    if pd.notna(prob) and prob >= 0.50:
         top_feature_names = [name for name, _ in risk_increasing]
         top_features_text = format_feature_list(top_feature_names)
 
@@ -719,27 +727,41 @@ def generate_shap_recommendations(explanation, top_n=3):
             recommendations.append(
                 f"{feature_label} appears to be contributing to this student’s dropout risk and may require closer attention."
             )
+
+    elif pd.notna(prob) and 0.25 <= prob < 0.50:
+        top_feature_names = [name for name, _ in risk_increasing]
+        top_features_text = format_feature_list(top_feature_names)
+
+        recommendations.append(
+            f"This student is not currently predicted to drop out, but the main factors that may require monitoring are {top_features_text}. "
+            f"The institution may wish to monitor these areas and provide support where needed."
+        )
+
+        for name, _ in risk_increasing:
+            feature_label = clean_name(name)
+            recommendations.append(
+                f"{feature_label} may warrant monitoring, as it is contributing to this student’s dropout risk."
+            )
+
     else:
-        risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
+        top_feature_names = [name for name, _ in risk_reducing]
+        top_features_text = format_feature_list(top_feature_names)
 
-        if risk_reducing:
-            top_feature_names = [name for name, _ in risk_reducing]
-            top_features_text = format_feature_list(top_feature_names)
+        recommendations.append(
+            f"The main factors supporting this student’s continued enrollment are {top_features_text}. "
+            f"The institution should continue to maintain and reinforce these strengths."
+        )
 
+        for name, _ in risk_reducing:
+            feature_label = clean_name(name)
             recommendations.append(
-                f"The main factors supporting this student’s continued enrollment are {top_features_text}. "
-                f"The institution should continue to maintain and reinforce these strengths."
+                f"{feature_label} is contributing positively to this student’s outcome and should be sustained."
             )
 
-            for name, _ in risk_reducing:
-                feature_label = clean_name(name)
-                recommendations.append(
-                    f"{feature_label} is contributing positively to this student’s outcome and should be sustained."
-                )
-        else:
-            recommendations.append(
-                "No strong contributing factors were identified among the top SHAP features for this prediction."
-            )
+    if not recommendations:
+        recommendations.append(
+            "No strong contributing factors were identified among the top SHAP features for this prediction."
+        )
 
     unique_recommendations = []
     seen = set()
@@ -1469,7 +1491,11 @@ with predict_tab:
                 )
                 render_summary_box(selected_student_id, summary_html)
 
-                recommendations = generate_shap_recommendations(st.session_state.latest_explanation)
+                recommendations = generate_shap_recommendations(
+                    st.session_state.latest_explanation,
+                    row["Prediction"].iloc[0] if "Prediction" in row.columns else "Unknown",
+                    row["Dropout Probability Value"].iloc[0] if "Dropout Probability Value" in row.columns else np.nan,
+                )
                 render_recommendation_box(selected_student_id, recommendations)
 
         with shap_col2:
