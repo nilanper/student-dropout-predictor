@@ -1318,7 +1318,10 @@ with train_tab:
         st.markdown("### Model Performance Metrics")
         if st.session_state.train_metrics is not None:
             metrics_df = generate_metrics_table(st.session_state.train_metrics)
-            st.dataframe(metrics_df, width=380, hide_index=True)
+            display_df = metrics_df, width=380, hide_index=True.reset_index(drop=True).copy()
+            display_df.index = display_df.index + 1
+            display_df.index.name = "No."
+            st.dataframe(display_df)
 
             if st.session_state.selected_model_name is not None:
                 st.markdown(f"**Selected Model:** {st.session_state.selected_model_name}")
