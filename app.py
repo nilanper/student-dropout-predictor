@@ -674,7 +674,7 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
     return summary_html
 
 
-def generate_shap_recommendations(explanation, prediction_label, prediction_prob_value, raw_row, top_n=3):
+def generate_shap_recommendations(explanation, prediction_label, prediction_prob_value, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
 
@@ -694,41 +694,6 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
                 return f"{base} ({category})"
         return name.replace("_", " ").strip()
 
-    def format_raw_value(value):
-        if pd.isna(value):
-            return "Missing"
-        if isinstance(value, (np.integer, int)):
-            return str(int(value))
-        if isinstance(value, (np.floating, float)):
-            value = float(value)
-            if value.is_integer():
-                return str(int(value))
-            return f"{value:.2f}".rstrip("0").rstrip(".")
-        return str(value).strip()
-
-    def get_display_label(name):
-        cleaned = clean_name(name)
-
-        # First try an exact raw-column match, even if the column name contains parentheses.
-        if hasattr(raw_row, "index"):
-            lookup = {str(col).strip().lower(): col for col in raw_row.index}
-            key = cleaned.strip().lower()
-            if key in lookup:
-                raw_value = raw_row[lookup[key]]
-                return f"<b>{cleaned} - {format_raw_value(raw_value)}</b>"
-
-        # Only if no exact raw-column match exists, treat it like a one-hot style feature.
-        if "(" in cleaned and cleaned.endswith(")"):
-            base = cleaned[:cleaned.rfind("(")].strip()
-            category = cleaned[cleaned.rfind("(") + 1:-1].strip()
-            return f"<b>{base} - {category}</b>"
-
-        return f"<b>{cleaned}</b>"
-
-    def get_plain_display_label(name):
-        label_html = get_display_label(name)
-        return re.sub(r"</?b>", "", label_html)
-
     def format_feature_list(names):
         cleaned = [clean_name(name) for name in names if str(name).strip()]
         if not cleaned:
@@ -737,7 +702,7 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
             return cleaned[0]
         if len(cleaned) == 2:
             return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
 
     recommendations = []
 
@@ -746,18 +711,21 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
     except Exception:
         prob = np.nan
 
+    label = str(prediction_label).strip().lower()
+
     if pd.notna(prob) and prob >= 0.50:
         top_feature_names = [name for name, _ in risk_increasing]
         top_features_text = format_feature_list(top_feature_names)
 
         recommendations.append(
-            f"The main factors contributing to this student’s dropout risk are {top_features_text}."
+            f"The main factors increasing this student’s dropout risk are {top_features_text}. "
+            f"The institution may wish to review these areas closely and consider targeted support."
         )
 
         for name, _ in risk_increasing:
-            feature_label = get_display_label(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
-                f"{feature_label} is one of the factors contributing to this student’s dropout risk."
+                f"{feature_label} appears to be contributing to this student’s dropout risk and may require closer attention."
             )
 
     elif pd.notna(prob) and 0.25 <= prob < 0.50:
@@ -765,13 +733,14 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         top_features_text = format_feature_list(top_feature_names)
 
         recommendations.append(
-            f"The main factors influencing this student’s prediction are {top_features_text}."
+            f"This student is not currently predicted to drop out, but the main factors that may require monitoring are {top_features_text}. "
+            f"The institution may wish to monitor these areas and provide support where needed."
         )
 
         for name, _ in risk_increasing:
-            feature_label = get_display_label(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
-                f"{feature_label} is one of the factors influencing this student’s predicted outcome."
+                f"{feature_label} may warrant monitoring, as it is contributing to this student’s dropout risk."
             )
 
     else:
@@ -779,13 +748,14 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         top_features_text = format_feature_list(top_feature_names)
 
         recommendations.append(
-            f"The main factors supporting this student’s predicted outcome are {top_features_text}."
+            f"The main factors supporting this student’s continued enrollment are {top_features_text}. "
+            f"The institution should continue to maintain and reinforce these strengths."
         )
 
         for name, _ in risk_reducing:
-            feature_label = get_display_label(name)
+            feature_label = f"<b>{clean_name(name)}</b>"
             recommendations.append(
-                f"{feature_label} is one of the factors contributing positively to this student’s predicted outcome."
+                f"{feature_label} is contributing positively to this student’s outcome and should be sustained."
             )
 
     if not recommendations:
@@ -884,7 +854,7 @@ def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarr
             return cleaned[0]
         if len(cleaned) == 2:
             return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
 
     top_feature_names = [name for name, _, _ in top_features]
     top_features_text = format_feature_list(top_feature_names)
@@ -1525,7 +1495,6 @@ with predict_tab:
                     st.session_state.latest_explanation,
                     row["Prediction"] if "Prediction" in row.index else "Unknown",
                     row["Dropout Probability Value"] if "Dropout Probability Value" in row.index else np.nan,
-                    row,
                 )
                 render_recommendation_box(selected_student_id, recommendations)
 
