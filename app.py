@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import tempfile
 import warnings
 from typing import List, Tuple
@@ -772,7 +773,7 @@ prior academic difficulty, and study behaviour when identifying students who may
 
 
 def render_global_summary_box(summary_html: str):
-    summary_html = str(summary_html).replace("<div>", "").replace("</div>", "")
+    summary_html = re.sub(r"</?div[^>]*>", "", str(summary_html)).strip()
 
     st.markdown(
         f"""
@@ -795,8 +796,6 @@ def render_global_summary_box(summary_html: str):
         """,
         unsafe_allow_html=True,
     )
-
-
 
 def train_institution_model(
     df: pd.DataFrame,
