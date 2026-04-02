@@ -1485,12 +1485,13 @@ with train_tab:
                 model_choice = st.selectbox(
                     "Model Selection",
                     [
-                        "XGBoost",
-                        "Random Forest",
-                        "Logistic Regression",
-                        "Neural Network",
-                        "Run all 4 and choose the best",
-                    ],
+        "Logistic Regression",
+        "XGBoost",
+        "Random Forest",
+        "Neural Network",
+        "Run all 4 and choose the best",
+],
+                    index=0
                 )
 
                 selection_metric = st.selectbox(
@@ -1550,7 +1551,7 @@ with train_tab:
             st.markdown("### Global SHAP Summary")
             if st.session_state.shap_variance_warning:
                 st.warning(st.session_state.shap_variance_warning)
-            plot_col1, plot_col2 = st.columns(2)
+            plot_col1, plot_gap, plot_col2 = st.columns([1, 0.12, 1])
 
             with plot_col1:
                 render_centered_chart_help(
