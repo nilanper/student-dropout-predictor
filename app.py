@@ -83,32 +83,83 @@ init_state()
 st.markdown(
     """
     <style>
+    :root {
+        --app-bg: #f6f4fb;
+        --surface: #ffffff;
+        --text-main: #1f1830;
+        --border-soft: #ddd6f0;
+        --primary: #5b3cc4;
+        --shadow-soft: 0 10px 26px rgba(63, 34, 124, 0.08);
+        --shadow-card: 0 6px 18px rgba(63, 34, 124, 0.06);
+    }
+
+    .stApp {
+        background:
+            radial-gradient(circle at top right, rgba(128, 90, 213, 0.08), transparent 28%),
+            radial-gradient(circle at top left, rgba(99, 102, 241, 0.08), transparent 24%),
+            var(--app-bg);
+        color: var(--text-main);
+    }
+
+    .block-container {
+        padding-top: 1.35rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 1320px !important;
+    }
+
+    .app-hero {
+        background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
+        border-radius: 22px;
+        padding: 1.2rem 1.4rem 1.15rem 1.4rem;
+        color: white;
+        box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
+        margin-bottom: 1.1rem;
+        border: 1px solid rgba(255,255,255,0.16);
+    }
+
+    .app-hero h1 {
+        margin: 0;
+        font-size: 1.9rem;
+        line-height: 1.15;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+
+    .app-hero p {
+        margin: 0.45rem 0 0 0;
+        font-size: 0.98rem;
+        opacity: 0.95;
+        line-height: 1.45;
+    }
+
     .shap-plot-frame {
-        border: 1px solid rgba(49, 51, 63, 0.2);
-        border-radius: 0.75rem;
-        padding: 0.5rem;
-        background: white;
+        border: 1px solid var(--border-soft);
+        border-radius: 18px;
+        padding: 0.75rem;
+        background: var(--surface);
+        box-shadow: var(--shadow-card);
     }
 
     .training-banner {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.85rem 1rem;
-        border-radius: 0.75rem;
-        background: #e0f2fe;
-        color: #075985;
-        border: 1px solid #bae6fd;
+        padding: 0.95rem 1rem;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #eef3ff 0%, #f7f2ff 100%);
+        color: #43307a;
+        border: 1px solid #d8cdf7;
         font-weight: 600;
         margin-top: 0.6rem;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.85rem;
+        box-shadow: var(--shadow-card);
     }
 
     .training-spinner {
         width: 18px;
         height: 18px;
-        border: 3px solid #7dd3fc;
-        border-top: 3px solid #0284c7;
+        border: 3px solid #d7cbff;
+        border-top: 3px solid #6d4de0;
         border-radius: 50%;
         animation: training-spin 0.9s linear infinite;
         flex-shrink: 0;
@@ -119,13 +170,97 @@ st.markdown(
         100% { transform: rotate(360deg); }
     }
 
-    button[kind="secondary"] {
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--text-main);
+        letter-spacing: -0.02em;
+    }
+
+    [data-testid="stTabs"] button {
+        border-radius: 14px 14px 0 0 !important;
+        padding: 0.8rem 1rem !important;
+        font-weight: 700 !important;
+    }
+
+    [data-testid="stTabs"] [aria-selected="true"] {
+        color: var(--primary) !important;
+        border-bottom-color: var(--primary) !important;
+    }
+
+    [data-testid="stFileUploader"] section,
+    [data-testid="stSelectbox"] > div,
+    [data-testid="stNumberInput"] > div,
+    [data-testid="stTextInput"] > div {
+        background: var(--surface) !important;
+        border-radius: 14px !important;
+    }
+
+    button[kind="secondary"],
+    button[kind="primary"] {
         white-space: nowrap !important;
         width: auto !important;
-        padding-left: 12px !important;
-        padding-right: 12px !important;
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+        border-radius: 12px !important;
+        border: 1px solid #d8cdf7 !important;
+        box-shadow: var(--shadow-card) !important;
+        font-weight: 700 !important;
+    }
+
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #5b3cc4 0%, #7a5af8 100%) !important;
+        color: white !important;
+        border-color: #5b3cc4 !important;
+    }
+
+    button[kind="secondary"] {
+        background: white !important;
+        color: #4b2bbd !important;
+    }
+
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--border-soft);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--shadow-card);
+        background: var(--surface);
+    }
+
+    [data-testid="stMetric"] {
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        border-radius: 16px;
+        padding: 0.35rem 0.6rem;
+        box-shadow: var(--shadow-card);
+    }
+
+    [data-testid="stAlert"] {
+        border-radius: 14px !important;
+        box-shadow: var(--shadow-card);
+    }
+
+    div[data-testid="stPopover"] button {
+        border-radius: 10px !important;
+    }
+
+    .stDownloadButton button {
+        background: linear-gradient(135deg, #ffffff 0%, #f4efff 100%) !important;
+        color: #4b2bbd !important;
+        border-color: #d8cdf7 !important;
     }
     </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="app-hero">
+        <h1>🎓 Student Dropout Predictor with SHAP Explainer</h1>
+        <p>
+            A presentation-ready academic dashboard for training machine learning models,
+            predicting dropout risk, and explaining results through intuitive SHAP-based insights.
+        </p>
+    </div>
     """,
     unsafe_allow_html=True,
 )
