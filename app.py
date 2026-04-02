@@ -66,8 +66,6 @@ def init_state():
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
         "global_shap_summary_text": "",
-        "shap_variance_low": False,
-        "shap_variance_warning": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -161,8 +159,6 @@ def reset_training_state():
     st.session_state.selected_model_name = None
     st.session_state.model_comparison_df = None
     st.session_state.global_shap_summary_text = ""
-    st.session_state.shap_variance_low = False
-    st.session_state.shap_variance_warning = ""
     reset_prediction_state()
 
 
@@ -202,17 +198,6 @@ def render_training_status(placeholder, message: str):
         unsafe_allow_html=True,
     )
 
-
-
-
-def is_low_variance_prediction_array(pred_probs: np.ndarray, threshold: float = 1e-4) -> bool:
-    try:
-        arr = np.asarray(pred_probs, dtype=float)
-        if arr.size == 0:
-            return True
-        return float(np.nanstd(arr)) < float(threshold)
-    except Exception:
-        return False
 
 
 def normalize_binary_target(series: pd.Series) -> pd.Series:
@@ -1039,51 +1024,36 @@ def train_institution_model(
 
     feature_names = get_transformed_feature_names(preprocessor)
 
+    render_training_status(status_placeholder, "Building local SHAP explainer...")
+    X_local_background = X_train_t[: min(200, len(X_train_t))]
+    local_explainer = get_local_probability_explainer(best_model, X_local_background)
+
+    render_training_status(status_placeholder, "Generating global SHAP plots...")
+    X_global_background = X_train_t[: min(200, len(X_train_t))]
+    global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
+
     global_sample_size = min(300, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(X_train_t.shape[0], size=global_sample_size, replace=False)
     X_shap_sample = X_train_t[sample_idx]
-    shap_sample_pred_probs = best_model.predict_proba(X_shap_sample)[:, 1]
 
-    shap_variance_low = is_low_variance_prediction_array(shap_sample_pred_probs)
-    shap_variance_warning = ""
-    local_explainer = None
-    importance_bytes = None
-    summary_bytes = None
-    global_shap_summary_text = ""
+    importance_bytes, summary_bytes = build_global_shap_plots_fast(
+        global_explainer,
+        best_model_name,
+        X_shap_sample,
+        feature_names,
+    )
 
-    if shap_variance_low:
-        shap_variance_warning = (
-            "⚠️ The model predictions show very low variation for this dataset. "
-            "This means the model is producing nearly the same prediction for most students, "
-            "so SHAP explanations are not meaningful. Global and individual SHAP plots have been skipped."
-        )
+    global_shap_values_obj = global_explainer(X_shap_sample)
+    if hasattr(global_shap_values_obj, "values"):
+        global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
     else:
-        render_training_status(status_placeholder, "Building local SHAP explainer...")
-        X_local_background = X_train_t[: min(200, len(X_train_t))]
-        local_explainer = get_local_probability_explainer(best_model, X_local_background)
+        global_shap_values = np.array(global_shap_values_obj)
 
-        render_training_status(status_placeholder, "Generating global SHAP plots...")
-        X_global_background = X_train_t[: min(200, len(X_train_t))]
-        global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
-
-        importance_bytes, summary_bytes = build_global_shap_plots_fast(
-            global_explainer,
-            best_model_name,
-            X_shap_sample,
-            feature_names,
-        )
-
-        global_shap_values_obj = global_explainer(X_shap_sample)
-        if hasattr(global_shap_values_obj, "values"):
-            global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
-        else:
-            global_shap_values = np.array(global_shap_values_obj)
-
-        global_shap_summary_text = generate_global_shap_summary(
-            feature_names,
-            global_shap_values,
-            top_n=5,
-        )
+    global_shap_summary_text = generate_global_shap_summary(
+        feature_names,
+        global_shap_values,
+        top_n=5,
+    )
 
     render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
@@ -1102,8 +1072,6 @@ def train_institution_model(
     st.session_state.model_comparison_df = comparison_df
     st.session_state.selection_metric = selection_metric
     st.session_state.global_shap_summary_text = global_shap_summary_text
-    st.session_state.shap_variance_low = shap_variance_low
-    st.session_state.shap_variance_warning = shap_variance_warning
 
     if model_choice == "Run all 4 and choose the best":
         st.session_state.train_success_message = (
@@ -1159,10 +1127,6 @@ def format_explain_status(student_id: str, pred_label: str, pred_prob: float) ->
 def explain_student(chosen_id: str):
     if not st.session_state.is_trained:
         raise RuntimeError("Please train the institution model first in Tab 1.")
-    if st.session_state.shap_variance_low or st.session_state.shap_explainer is None:
-        raise RuntimeError(
-            "SHAP explanations are not available because the model predictions show very low variation for this dataset."
-        )
     if st.session_state.predict_df is None:
         raise RuntimeError("Please upload a prediction file and generate predictions first.")
 
@@ -1328,8 +1292,6 @@ with train_tab:
                 st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
 
             st.markdown("### Global SHAP Summary")
-            if st.session_state.shap_variance_warning:
-                st.warning(st.session_state.shap_variance_warning)
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
@@ -1497,16 +1459,13 @@ with predict_tab:
             else:
                 selected_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
 
-            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True, disabled=st.session_state.shap_variance_low)
+            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True)
             clear_shap_clicked = st.button("Clear SHAP Section", use_container_width=True)
 
             if clear_shap_clicked:
                 st.session_state.latest_explanation = None
                 st.session_state.latest_plot_bytes = None
                 st.session_state.explain_status = ""
-
-            if st.session_state.shap_variance_warning:
-                st.warning(st.session_state.shap_variance_warning)
 
             if explain_clicked:
                 try:
