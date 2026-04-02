@@ -362,12 +362,27 @@ def save_prediction_results(df: pd.DataFrame) -> str:
 
 def clean_feature_names(feature_names: List[str]) -> List[str]:
     cleaned = []
+
     for name in feature_names:
-        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ")
+        name = str(name)
+
+        name = name.replace("num__", "").replace("cat__", "")
+
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                label = f"{base} ({category})"
+            else:
+                label = name
+        else:
+            label = name
+
+        label = label.replace("_", " ").strip()
         cleaned.append(label[:70])
+
     return cleaned
-
-
 
 def compute_metrics(y_true, y_pred, y_prob):
     return {
@@ -631,7 +646,16 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
     risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
 
     def clean_name(name):
-        return str(name).replace("_", " ").strip()
+        name = str(name)
+
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                return f"{base} ({category})"
+
+        return name.replace("_", " ").strip()
 
     increasing_text = ", ".join(clean_name(name) for name, _ in risk_increasing) if risk_increasing else "no major factors"
     reducing_text = ", ".join(clean_name(name) for name, _ in risk_reducing) if risk_reducing else "no major factors"
@@ -648,7 +672,6 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
         summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
 
     return summary_html
-
 
 def generate_shap_recommendations(explanation, top_n=3):
     feature_names = explanation.feature_names
@@ -676,10 +699,11 @@ def generate_shap_recommendations(explanation, top_n=3):
     used = set()
 
     for feature, _ in risk_increasing:
-        clean_feature = str(feature).replace("_", " ").strip().lower()
+        clean_feature = str(feature).lower()
+        base_feature = clean_feature.split("_")[0]
 
         for key, advice in recommendation_map.items():
-            if key in clean_feature and advice not in used:
+            if (key in clean_feature or key in base_feature) and advice not in used:
                 recommendations.append(advice)
                 used.add(advice)
                 break
@@ -690,7 +714,6 @@ def generate_shap_recommendations(explanation, top_n=3):
         )
 
     return recommendations
-
 
 def render_summary_box(student_id: str, summary_html: str):
     st.markdown(
@@ -754,23 +777,51 @@ def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarr
     reducing = [name for name, _, signed in feature_importance if signed < 0][:top_n]
 
     def clean_name(name):
-        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ").strip()
-        return label
+        name = str(name).replace("num__", "").replace("cat__", "")
 
-    top_features_text = ", ".join(clean_name(name) for name, _, _ in top_features) if top_features else "no major factors"
-    increasing_text = ", ".join(clean_name(name) for name in increasing) if increasing else "no clear overall risk-increasing factors"
-    reducing_text = ", ".join(clean_name(name) for name in reducing) if reducing else "no clear overall risk-reducing factors"
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                return f"{base} ({category})"
+
+        return name.replace("_", " ").strip()
+
+    def format_feature_list(names):
+        cleaned = [clean_name(name) for name in names if str(name).strip()]
+        if not cleaned:
+            return "no major factors"
+        if len(cleaned) == 1:
+            return cleaned[0]
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
+
+    top_feature_names = [name for name, _, _ in top_features]
+    top_features_text = format_feature_list(top_feature_names)
+    increasing_text = format_feature_list(increasing) if increasing else "no clear overall risk-increasing factors"
+    reducing_text = format_feature_list(reducing) if reducing else "no clear overall risk-reducing factors"
+
+    if top_feature_names:
+        overall_focus_text = format_feature_list(top_feature_names[:4])
+        final_sentence = (
+            f"Overall, these patterns suggest the institution should pay close attention to "
+            f"<b>{overall_focus_text}</b> when identifying students who may need support."
+        )
+    else:
+        final_sentence = (
+            "Overall, these patterns suggest the institution should continue monitoring the main drivers of dropout risk when identifying students who may need support."
+        )
 
     summary_html = f"""
 The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
 Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
 Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
-Overall, these patterns suggest the institution should pay close attention to attendance, academic performance,
-prior academic difficulty, and study behaviour when identifying students who may need support.
+{final_sentence}
 """
 
     return summary_html
-
 
 def render_global_summary_box(summary_html: str):
     summary_html = re.sub(r"</?div[^>]*>", "", str(summary_html)).strip()
