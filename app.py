@@ -617,7 +617,7 @@ def render_centered_chart_help(title: str, help_text: str, heading_level: int = 
         st.write("")
 
 
-def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, student_id, top_n=3):
+def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
 
@@ -633,18 +633,18 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
     increasing_text = ", ".join(clean_name(name) for name, _ in risk_increasing) if risk_increasing else "no major factors"
     reducing_text = ", ".join(clean_name(name) for name, _ in risk_reducing) if risk_reducing else "no major factors"
 
-    summary = f"""
+    summary_html = f"""
     This student was predicted as <b>{prediction_label}</b> with a dropout probability of <b>{prediction_prob}</b>.<br><br>
     <b>Factors increasing dropout risk:</b> {increasing_text}<br>
     <b>Factors reducing dropout risk:</b> {reducing_text}<br><br>
     """
 
     if str(prediction_label).lower() == "dropout":
-        summary += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk."
+        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk."
     else:
-        summary += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
+        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
 
-    return summary
+    return summary_html
 
 
 def generate_shap_recommendations(explanation, top_n=3):
@@ -653,6 +653,7 @@ def generate_shap_recommendations(explanation, top_n=3):
 
     items = list(zip(feature_names, shap_values))
     items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
+
     risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
 
     recommendation_map = {
@@ -673,6 +674,7 @@ def generate_shap_recommendations(explanation, top_n=3):
 
     for feature, _ in risk_increasing:
         clean_feature = str(feature).replace("_", " ").strip().lower()
+
         for key, advice in recommendation_map.items():
             if key in clean_feature and advice not in used:
                 recommendations.append(advice)
@@ -693,9 +695,9 @@ def render_summary_box(student_id: str, summary_html: str):
         <div style="
             padding: 0.9rem 1rem;
             border-radius: 0.6rem;
-            background: #f0f9ff;
-            color: #0c4a6e;
-            border: 1px solid #bae6fd;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
             margin-top: 0.75rem;
             margin-bottom: 0.75rem;
         ">
@@ -711,7 +713,7 @@ def render_summary_box(student_id: str, summary_html: str):
     )
 
 
-def render_recommendation_box(student_id: str, recommendations: List[str]):
+def render_recommendation_box(student_id: str, recommendations):
     rec_html = "".join([f"<li>{rec}</li>" for rec in recommendations])
 
     st.markdown(
@@ -719,9 +721,9 @@ def render_recommendation_box(student_id: str, recommendations: List[str]):
         <div style="
             padding: 0.9rem 1rem;
             border-radius: 0.6rem;
-            background: #fff7ed;
-            color: #9a3412;
-            border: 1px solid #fdba74;
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fde68a;
             margin-top: 0.75rem;
             margin-bottom: 0.75rem;
         ">
@@ -1282,6 +1284,30 @@ with predict_tab:
                     )
                 else:
                     st.error(st.session_state.explain_status)
+
+            if (
+                st.session_state.latest_explanation is not None
+                and st.session_state.predict_df is not None
+                and selected_student_id
+                and st.session_state.explain_status.startswith("✅")
+            ):
+                student_id_col = st.session_state.student_id_column
+                row = st.session_state.predict_df[
+                    st.session_state.predict_df[student_id_col].astype(str) == str(selected_student_id)
+                ].iloc[0]
+
+                pred_label = row["Prediction"]
+                pred_prob = format_probability(row["Dropout Probability Value"])
+
+                summary_html = generate_plain_language_shap_summary(
+                    st.session_state.latest_explanation,
+                    pred_label,
+                    pred_prob,
+                )
+                render_summary_box(selected_student_id, summary_html)
+
+                recommendations = generate_shap_recommendations(st.session_state.latest_explanation)
+                render_recommendation_box(selected_student_id, recommendations)
 
         with shap_col2:
             render_centered_chart_help(
