@@ -724,15 +724,25 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
     def get_display_label(name):
         cleaned = clean_name(name)
 
-        # First try an exact raw-column match, even if the column name contains parentheses.
         if hasattr(raw_row, "index"):
             lookup = {str(col).strip().lower(): col for col in raw_row.index}
             key = cleaned.strip().lower()
+
+            # First try an exact raw-column match, even if the column name contains parentheses.
             if key in lookup:
                 raw_value = raw_row[lookup[key]]
                 return f"<b>{cleaned} - {format_raw_value(raw_value)}</b>"
 
-        # Only if no exact raw-column match exists, treat it like a one-hot style feature.
+            # For one-hot style features like "Gender (Female)", prefer the actual raw category
+            # from the base column, e.g. "Gender - Male".
+            if "(" in cleaned and cleaned.endswith(")"):
+                base = cleaned[:cleaned.rfind("(")].strip()
+                base_key = base.strip().lower()
+                if base_key in lookup:
+                    raw_value = raw_row[lookup[base_key]]
+                    return f"<b>{base} - {format_raw_value(raw_value)}</b>"
+
+        # Only if no raw-column/base-column match exists, fall back to the encoded category text.
         if "(" in cleaned and cleaned.endswith(")"):
             base = cleaned[:cleaned.rfind("(")].strip()
             category = cleaned[cleaned.rfind("(") + 1:-1].strip()
