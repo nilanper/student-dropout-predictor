@@ -130,7 +130,7 @@ st.markdown(
     padding-top: 1.05rem !important;
     padding-bottom: 1.5rem !important;
     max-width: none !important;
-    padding-left: 2.4rem !important;
+    padding-left: 3rem !important;
     padding-right: 1.8rem !important;
 }
 
@@ -1431,7 +1431,7 @@ train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict 
 
 with train_tab:
     st.subheader("Train Institution Model")
-    col1, col2 = st.columns([1.05, 4.15])
+    col1, gap, col2 = st.columns([1, 0.15, 3])
 
     with col1:
         training_file = st.file_uploader(
