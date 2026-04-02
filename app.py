@@ -131,7 +131,7 @@ st.markdown(
     padding-bottom: 1.5rem !important;
     max-width: none !important;
     padding-left: 3rem !important;
-    padding-right: 1.8rem !important;
+    padding-right: 3rem !important;
 }
 
 .app-hero {
@@ -776,7 +776,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
         shap_values = np.array(shap_values_obj)
 
     plt.close("all")
-    plt.figure(figsize=(13.8, 8.2))
+    plt.figure(figsize=(12.0, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -790,7 +790,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
     plt.close(fig_bar)
 
     plt.close("all")
-    plt.figure(figsize=(13.8, 8.2))
+    plt.figure(figsize=(12.0, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -815,7 +815,7 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(13, 9 + max_len * 0.08), 18)
+    fig_width = min(max(11.5, 8.2 + max_len * 0.075), 15.5)
     fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
 
