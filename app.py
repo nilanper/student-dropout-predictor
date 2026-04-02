@@ -709,19 +709,19 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
     def get_display_label(name):
         cleaned = clean_name(name)
 
-        # For one-hot style names like "Parent Education (Secondary)"
-        if "(" in cleaned and cleaned.endswith(")"):
-            base = cleaned[:cleaned.rfind("(")].strip()
-            category = cleaned[cleaned.rfind("(") + 1:-1].strip()
-            return f"<b>{base} - {category}</b>"
-
-        # For direct raw columns, pull the original uploaded value
+        # First try an exact raw-column match, even if the column name contains parentheses.
         if hasattr(raw_row, "index"):
             lookup = {str(col).strip().lower(): col for col in raw_row.index}
             key = cleaned.strip().lower()
             if key in lookup:
                 raw_value = raw_row[lookup[key]]
                 return f"<b>{cleaned} - {format_raw_value(raw_value)}</b>"
+
+        # Only if no exact raw-column match exists, treat it like a one-hot style feature.
+        if "(" in cleaned and cleaned.endswith(")"):
+            base = cleaned[:cleaned.rfind("(")].strip()
+            category = cleaned[cleaned.rfind("(") + 1:-1].strip()
+            return f"<b>{base} - {category}</b>"
 
         return f"<b>{cleaned}</b>"
 
