@@ -79,16 +79,20 @@ init_state()
 
 st.markdown(
     """
-    <div class="sticky-hero-wrap">
-        <div class="app-hero">
-            <h1>🎓 Student Dropout Predictor with SHAP Explainer</h1>
-            <p>
-                A dashboard for training machine learning models, predicting dropout risk, and explaining results through intuitive SHAP-based insights.
-            </p>
-        </div>
-        <div class="app-intro">
-            Upload a CSV file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
-        </div>
+    <div class="app-hero">
+        <h1>🎓 Student Dropout Predictor with SHAP Explainer</h1>
+        <p>
+            A dashboard for training machine learning models, predicting dropout risk, and explaining results through intuitive SHAP-based insights.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="app-intro">
+        Upload a CSV file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
     </div>
     """,
     unsafe_allow_html=True,
@@ -126,14 +130,14 @@ st.markdown(
     padding-top: 1.05rem !important;
     padding-bottom: 1.5rem !important;
     max-width: none !important;
-    padding-left: 2.4rem !important;
-    padding-right: 3rem !important;
+    padding-left: 3rem !important;
+    padding-right: 1.8rem !important;
 }
 
 .app-hero {
     background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
     border-radius: 22px;
-    padding: 1.1rem 1.35rem 1.05rem 1.35rem;
+    padding: 1.8rem 1.35rem 1.05rem 1.35rem;
     color: white;
     box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
     margin-bottom: 0.55rem;
@@ -158,7 +162,7 @@ st.markdown(
 }
 
 .app-intro {
-    margin: 0.1rem 0 0.9rem 0.1rem;
+    margin: 0.1rem 0 0.9rem 1rem;
     font-size: 1rem;
     color: var(--text-muted);
     line-height: 1.45;
@@ -205,33 +209,6 @@ st.markdown(
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-main);
     letter-spacing: -0.02em;
-}
-
-.sticky-hero-wrap {
-    position: sticky;
-    top: 0;
-    z-index: 1005;
-    background: var(--app-bg);
-    padding-top: 0.15rem;
-}
-
-.app-intro {
-    margin: 0.1rem 0 0.6rem 1rem;
-    font-size: 1rem;
-    color: var(--text-muted);
-    line-height: 1.45;
-    background: var(--app-bg);
-    padding: 0.35rem 0 0.35rem 0;
-}
-
-[data-testid="stTabs"] {
-    position: sticky;
-    top: 170px;
-    z-index: 1004;
-    background: var(--app-bg);
-    padding-top: 0.2rem;
-    padding-bottom: 0.15rem;
-    box-shadow: 0 2px 8px rgba(63, 34, 124, 0.06);
 }
 
 [data-testid="stTabs"] button {
@@ -799,7 +776,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
         shap_values = np.array(shap_values_obj)
 
     plt.close("all")
-    plt.figure(figsize=(12.2, 8.2))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -813,7 +790,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
     plt.close(fig_bar)
 
     plt.close("all")
-    plt.figure(figsize=(12.2, 8.2))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -838,7 +815,7 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(11.5, 8.2 + max_len * 0.075), 15.5)
+    fig_width = min(max(13, 9 + max_len * 0.08), 18)
     fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
 
@@ -1454,7 +1431,7 @@ train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict 
 
 with train_tab:
     st.subheader("Train Institution Model")
-    col1, col2 = st.columns([1.05, 4.15])
+    col1, gap, col2 = st.columns([1, 0.15, 3])
 
     with col1:
         training_file = st.file_uploader(
@@ -1508,12 +1485,13 @@ with train_tab:
                 model_choice = st.selectbox(
                     "Model Selection",
                     [
-                        "XGBoost",
-                        "Random Forest",
-                        "Logistic Regression",
-                        "Neural Network",
-                        "Run all 4 and choose the best",
-                    ],
+        "Logistic Regression",
+        "XGBoost",
+        "Random Forest",
+        "Neural Network",
+        "Run all 4 and choose the best",
+],
+                    index=0
                 )
 
                 selection_metric = st.selectbox(
@@ -1573,7 +1551,7 @@ with train_tab:
             st.markdown("### Global SHAP Summary")
             if st.session_state.shap_variance_warning:
                 st.warning(st.session_state.shap_variance_warning)
-            plot_col1, plot_col2 = st.columns(2)
+            plot_col1, plot_gap, plot_col2 = st.columns([1, 0.12, 1])
 
             with plot_col1:
                 render_centered_chart_help(
