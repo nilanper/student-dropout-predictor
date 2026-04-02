@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import tempfile
 import warnings
 from typing import List, Tuple
@@ -64,6 +65,9 @@ def init_state():
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
+        "global_shap_summary_text": "",
+        "shap_variance_low": False,
+        "shap_variance_warning": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -156,6 +160,9 @@ def reset_training_state():
     st.session_state.train_success_message = ""
     st.session_state.selected_model_name = None
     st.session_state.model_comparison_df = None
+    st.session_state.global_shap_summary_text = ""
+    st.session_state.shap_variance_low = False
+    st.session_state.shap_variance_warning = ""
     reset_prediction_state()
 
 
@@ -195,6 +202,17 @@ def render_training_status(placeholder, message: str):
         unsafe_allow_html=True,
     )
 
+
+
+
+def is_low_variance_prediction_array(pred_probs: np.ndarray, threshold: float = 1e-4) -> bool:
+    try:
+        arr = np.asarray(pred_probs, dtype=float)
+        if arr.size == 0:
+            return True
+        return float(np.nanstd(arr)) < float(threshold)
+    except Exception:
+        return False
 
 
 def normalize_binary_target(series: pd.Series) -> pd.Series:
@@ -359,12 +377,27 @@ def save_prediction_results(df: pd.DataFrame) -> str:
 
 def clean_feature_names(feature_names: List[str]) -> List[str]:
     cleaned = []
+
     for name in feature_names:
-        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ")
+        name = str(name)
+
+        name = name.replace("num__", "").replace("cat__", "")
+
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                label = f"{base} ({category})"
+            else:
+                label = name
+        else:
+            label = name
+
+        label = label.replace("_", " ").strip()
         cleaned.append(label[:70])
+
     return cleaned
-
-
 
 def compute_metrics(y_true, y_pred, y_prob):
     return {
@@ -628,26 +661,35 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
     risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
 
     def clean_name(name):
-        return str(name).replace("_", " ").strip()
+        name = str(name)
+
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                return f"{base} ({category})"
+
+        return name.replace("_", " ").strip()
 
     increasing_text = ", ".join(clean_name(name) for name, _ in risk_increasing) if risk_increasing else "no major factors"
     reducing_text = ", ".join(clean_name(name) for name, _ in risk_reducing) if risk_reducing else "no major factors"
 
     summary_html = f"""
     This student was predicted as <b>{prediction_label}</b> with a dropout probability of <b>{prediction_prob}</b>.<br><br>
-    <b>Factors increasing dropout risk:</b> {increasing_text}<br>
+    <b>Factors increasing dropout risk:</b> {increasing_text}<br><br>
     <b>Factors reducing dropout risk:</b> {reducing_text}<br><br>
     """
 
     if str(prediction_label).lower() == "dropout":
-        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk."
+        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk which resulted in a <b>Dropout</b> prediction."
     else:
-        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
+        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk which resulted in a <b>No Dropout</b> prediction."
 
     return summary_html
 
 
-def generate_shap_recommendations(explanation, top_n=3):
+def generate_shap_recommendations(explanation, prediction_label, prediction_prob_value, raw_row, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
 
@@ -655,38 +697,125 @@ def generate_shap_recommendations(explanation, top_n=3):
     items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
 
     risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
+    risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
 
-    recommendation_map = {
-        "attendance": "Encourage better class attendance and monitor absenteeism.",
-        "study hours": "Support the student in improving weekly study time and study habits.",
-        "previous failures": "Provide targeted academic support in subjects where the student previously struggled.",
-        "gpa": "Monitor academic performance closely and consider extra academic support.",
-        "scholarship": "Review whether financial or scholarship-related support may be needed.",
-        "internet": "Check whether the student has adequate access to online learning resources.",
-        "commute": "Check whether long travel time may be affecting attendance or performance.",
-        "travel": "Check whether travel burden may be affecting participation or performance.",
-        "engagement": "Consider closer academic engagement and mentoring support.",
-        "age": "Provide individualized student support based on the student’s broader academic context.",
-    }
+    def clean_name(name):
+        name = str(name).replace("num__", "").replace("cat__", "").strip()
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0].replace("_", " ").strip()
+                category = " ".join(parts[1:]).replace("_", " ").strip()
+                return f"{base} ({category})"
+        return name.replace("_", " ").strip()
+
+    def format_raw_value(value):
+        if pd.isna(value):
+            return "Missing"
+        if isinstance(value, (np.integer, int)):
+            return str(int(value))
+        if isinstance(value, (np.floating, float)):
+            value = float(value)
+            if value.is_integer():
+                return str(int(value))
+            return f"{value:.2f}".rstrip("0").rstrip(".")
+        return str(value).strip()
+
+    def get_display_label(name):
+        cleaned = clean_name(name)
+
+        # First try an exact raw-column match, even if the column name contains parentheses.
+        if hasattr(raw_row, "index"):
+            lookup = {str(col).strip().lower(): col for col in raw_row.index}
+            key = cleaned.strip().lower()
+            if key in lookup:
+                raw_value = raw_row[lookup[key]]
+                return f"<b>{cleaned} - {format_raw_value(raw_value)}</b>"
+
+        # Only if no exact raw-column match exists, treat it like a one-hot style feature.
+        if "(" in cleaned and cleaned.endswith(")"):
+            base = cleaned[:cleaned.rfind("(")].strip()
+            category = cleaned[cleaned.rfind("(") + 1:-1].strip()
+            return f"<b>{base} - {category}</b>"
+
+        return f"<b>{cleaned}</b>"
+
+    def get_plain_display_label(name):
+        label_html = get_display_label(name)
+        return re.sub(r"</?b>", "", label_html)
+
+    def format_feature_list(names):
+        cleaned = [clean_name(name) for name in names if str(name).strip()]
+        if not cleaned:
+            return "no major factors"
+        if len(cleaned) == 1:
+            return cleaned[0]
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
 
     recommendations = []
-    used = set()
 
-    for feature, _ in risk_increasing:
-        clean_feature = str(feature).replace("_", " ").strip().lower()
+    try:
+        prob = float(prediction_prob_value)
+    except Exception:
+        prob = np.nan
 
-        for key, advice in recommendation_map.items():
-            if key in clean_feature and advice not in used:
-                recommendations.append(advice)
-                used.add(advice)
-                break
+    if pd.notna(prob) and prob >= 0.50:
+        top_feature_names = [name for name, _ in risk_increasing]
+        top_features_text = format_feature_list(top_feature_names)
+
+        recommendations.append(
+            f"The main factors contributing to this student’s dropout risk are {top_features_text}."
+        )
+
+        for name, _ in risk_increasing:
+            feature_label = get_display_label(name)
+            recommendations.append(
+                f"{feature_label} is one of the factors contributing to this student’s dropout risk."
+            )
+
+    elif pd.notna(prob) and 0.25 <= prob < 0.50:
+        top_feature_names = [name for name, _ in risk_increasing]
+        top_features_text = format_feature_list(top_feature_names)
+
+        recommendations.append(
+            f"The main factors influencing this student’s prediction are {top_features_text}."
+        )
+
+        for name, _ in risk_increasing:
+            feature_label = get_display_label(name)
+            recommendations.append(
+                f"{feature_label} is one of the factors influencing this student’s predicted outcome."
+            )
+
+    else:
+        top_feature_names = [name for name, _ in risk_reducing]
+        top_features_text = format_feature_list(top_feature_names)
+
+        recommendations.append(
+            f"The main factors supporting this student’s predicted outcome are {top_features_text}."
+        )
+
+        for name, _ in risk_reducing:
+            feature_label = get_display_label(name)
+            recommendations.append(
+                f"{feature_label} is one of the factors contributing positively to this student’s predicted outcome."
+            )
 
     if not recommendations:
         recommendations.append(
-            "Consider providing general academic advising, attendance monitoring, and early support follow-up."
+            "No strong contributing factors were identified among the top SHAP features for this prediction."
         )
 
-    return recommendations
+    unique_recommendations = []
+    seen = set()
+    for rec in recommendations:
+        if rec not in seen:
+            unique_recommendations.append(rec)
+            seen.add(rec)
+
+    return unique_recommendations
 
 
 def render_summary_box(student_id: str, summary_html: str):
@@ -739,6 +868,88 @@ def render_recommendation_box(student_id: str, recommendations):
     )
 
 
+def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarray, top_n: int = 5):
+    mean_abs = np.mean(np.abs(shap_values), axis=0)
+    mean_signed = np.mean(shap_values, axis=0)
+
+    feature_importance = list(zip(feature_names, mean_abs, mean_signed))
+    feature_importance.sort(key=lambda x: x[1], reverse=True)
+
+    top_features = feature_importance[:top_n]
+    increasing = [name for name, _, signed in feature_importance if signed > 0][:top_n]
+    reducing = [name for name, _, signed in feature_importance if signed < 0][:top_n]
+
+    def clean_name(name):
+        name = str(name).replace("num__", "").replace("cat__", "")
+
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0]
+                category = " ".join(parts[1:])
+                return f"{base} ({category})"
+
+        return name.replace("_", " ").strip()
+
+    def format_feature_list(names):
+        cleaned = [clean_name(name) for name in names if str(name).strip()]
+        if not cleaned:
+            return "no major factors"
+        if len(cleaned) == 1:
+            return cleaned[0]
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
+
+    top_feature_names = [name for name, _, _ in top_features]
+    top_features_text = format_feature_list(top_feature_names)
+    increasing_text = format_feature_list(increasing) if increasing else "no clear overall risk-increasing factors"
+    reducing_text = format_feature_list(reducing) if reducing else "no clear overall risk-reducing factors"
+
+    if top_feature_names:
+        overall_focus_text = format_feature_list(top_feature_names[:4])
+        final_sentence = (
+            f"Overall, these patterns suggest the institution should pay close attention to "
+            f"<b>{overall_focus_text}</b> when identifying students who may need support."
+        )
+    else:
+        final_sentence = (
+            "Overall, these patterns suggest the institution should continue monitoring the main drivers of dropout risk when identifying students who may need support."
+        )
+
+    summary_html = f"""
+The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
+Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br><br>
+Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
+{final_sentence}
+"""
+
+    return summary_html
+
+def render_global_summary_box(summary_html: str):
+    summary_html = re.sub(r"</?div[^>]*>", "", str(summary_html)).strip()
+
+    st.markdown(
+        f"""
+        <div style="
+            padding: 0.9rem 1rem;
+            border-radius: 0.6rem;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        ">
+            <div style="font-weight: 700; margin-bottom: 0.45rem;">
+                SHAP Explanation - Overall Summary
+            </div>
+            <div style="line-height: 1.6;">
+                {summary_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def train_institution_model(
     df: pd.DataFrame,
@@ -828,24 +1039,51 @@ def train_institution_model(
 
     feature_names = get_transformed_feature_names(preprocessor)
 
-    render_training_status(status_placeholder, "Building local SHAP explainer...")
-    X_local_background = X_train_t[: min(200, len(X_train_t))]
-    local_explainer = get_local_probability_explainer(best_model, X_local_background)
-
-    render_training_status(status_placeholder, "Generating global SHAP plots...")
-    X_global_background = X_train_t[: min(200, len(X_train_t))]
-    global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
-
     global_sample_size = min(300, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(X_train_t.shape[0], size=global_sample_size, replace=False)
     X_shap_sample = X_train_t[sample_idx]
+    shap_sample_pred_probs = best_model.predict_proba(X_shap_sample)[:, 1]
 
-    importance_bytes, summary_bytes = build_global_shap_plots_fast(
-        global_explainer,
-        best_model_name,
-        X_shap_sample,
-        feature_names,
-    )
+    shap_variance_low = is_low_variance_prediction_array(shap_sample_pred_probs)
+    shap_variance_warning = ""
+    local_explainer = None
+    importance_bytes = None
+    summary_bytes = None
+    global_shap_summary_text = ""
+
+    if shap_variance_low:
+        shap_variance_warning = (
+            "⚠️ The model predictions show very low variation for this dataset. "
+            "This means the model is producing nearly the same prediction for most students, "
+            "so SHAP explanations are not meaningful. Global and individual SHAP plots have been skipped."
+        )
+    else:
+        render_training_status(status_placeholder, "Building local SHAP explainer...")
+        X_local_background = X_train_t[: min(200, len(X_train_t))]
+        local_explainer = get_local_probability_explainer(best_model, X_local_background)
+
+        render_training_status(status_placeholder, "Generating global SHAP plots...")
+        X_global_background = X_train_t[: min(200, len(X_train_t))]
+        global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
+
+        importance_bytes, summary_bytes = build_global_shap_plots_fast(
+            global_explainer,
+            best_model_name,
+            X_shap_sample,
+            feature_names,
+        )
+
+        global_shap_values_obj = global_explainer(X_shap_sample)
+        if hasattr(global_shap_values_obj, "values"):
+            global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
+        else:
+            global_shap_values = np.array(global_shap_values_obj)
+
+        global_shap_summary_text = generate_global_shap_summary(
+            feature_names,
+            global_shap_values,
+            top_n=5,
+        )
 
     render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
@@ -863,6 +1101,9 @@ def train_institution_model(
     st.session_state.selected_model_name = best_model_name
     st.session_state.model_comparison_df = comparison_df
     st.session_state.selection_metric = selection_metric
+    st.session_state.global_shap_summary_text = global_shap_summary_text
+    st.session_state.shap_variance_low = shap_variance_low
+    st.session_state.shap_variance_warning = shap_variance_warning
 
     if model_choice == "Run all 4 and choose the best":
         st.session_state.train_success_message = (
@@ -918,6 +1159,10 @@ def format_explain_status(student_id: str, pred_label: str, pred_prob: float) ->
 def explain_student(chosen_id: str):
     if not st.session_state.is_trained:
         raise RuntimeError("Please train the institution model first in Tab 1.")
+    if st.session_state.shap_variance_low or st.session_state.shap_explainer is None:
+        raise RuntimeError(
+            "SHAP explanations are not available because the model predictions show very low variation for this dataset."
+        )
     if st.session_state.predict_df is None:
         raise RuntimeError("Please upload a prediction file and generate predictions first.")
 
@@ -1066,6 +1311,8 @@ with train_tab:
 
         if st.session_state.train_success_message:
             st.success(st.session_state.train_success_message)
+            if st.session_state.global_shap_summary_text:
+                render_global_summary_box(st.session_state.global_shap_summary_text)
 
     with col2:
         st.markdown("### Model Performance Metrics")
@@ -1081,6 +1328,8 @@ with train_tab:
                 st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
 
             st.markdown("### Global SHAP Summary")
+            if st.session_state.shap_variance_warning:
+                st.warning(st.session_state.shap_variance_warning)
             plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
@@ -1107,11 +1356,15 @@ This chart shows **importance only**, not direction.
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
-- Red dots usually indicate **higher feature values**
-- Blue dots usually indicate **lower feature values**
+- Features are ordered by **importance (top = most important)**
 
-Dots to the **right** tend to increase dropout risk.  
-Dots to the **left** tend to decrease dropout risk.
+🔴 **Red dots** → higher feature values  
+🔵 **Blue dots** → lower feature values  
+
+➡️ Dots to the **right** increase dropout risk  
+⬅️ Dots to the **left** reduce dropout risk  
+
+The wider the spread, the stronger the feature's overall impact.
 """,
                 )
                 if st.session_state.global_summary_plot_bytes is not None:
@@ -1244,13 +1497,16 @@ with predict_tab:
             else:
                 selected_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
 
-            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True)
+            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True, disabled=st.session_state.shap_variance_low)
             clear_shap_clicked = st.button("Clear SHAP Section", use_container_width=True)
 
             if clear_shap_clicked:
                 st.session_state.latest_explanation = None
                 st.session_state.latest_plot_bytes = None
                 st.session_state.explain_status = ""
+
+            if st.session_state.shap_variance_warning:
+                st.warning(st.session_state.shap_variance_warning)
 
             if explain_clicked:
                 try:
@@ -1306,19 +1562,31 @@ with predict_tab:
                 )
                 render_summary_box(selected_student_id, summary_html)
 
-                recommendations = generate_shap_recommendations(st.session_state.latest_explanation)
+                recommendations = generate_shap_recommendations(
+                    st.session_state.latest_explanation,
+                    row["Prediction"] if "Prediction" in row.index else "Unknown",
+                    row["Dropout Probability Value"] if "Dropout Probability Value" in row.index else np.nan,
+                    row,
+                )
                 render_recommendation_box(selected_student_id, recommendations)
 
         with shap_col2:
             render_centered_chart_help(
                 "Individual SHAP Waterfall Plot",
                 """
-This plot explains **why this specific student** was predicted as Dropout or No Dropout.
+This chart explains **why this specific student received their prediction**.
 
-- Bars pushing to the **right** increase dropout risk
-- Bars pushing to the **left** decrease dropout risk
-- Larger bars mean a **stronger effect**
-- The final prediction is based on the combined effect of all displayed factors
+- The starting point is the **average dropout risk** indicated by **E[f(x)]**
+- Each feature pushes the dropout risk **higher or lower**
+
+🔴 **Red bars** → increase dropout risk  
+🔵 **Blue bars** → decrease dropout risk  
+
+➡️ Bars pushing to the **right** increase risk  
+⬅️ Bars pushing to the **left** reduce risk  
+
+- Longer bars mean a **stronger influence** on the prediction  
+- The final dropout risk indicated by **f(x)** is based on the combined effect of all displayed factors
 """,
                 heading_level=3,
             )
