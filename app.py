@@ -82,13 +82,17 @@ init_state()
 # ============================================================
 st.markdown(
     """
+
     <style>
     :root {
         --app-bg: #f6f4fb;
         --surface: #ffffff;
+        --surface-soft: #faf8ff;
         --text-main: #1f1830;
+        --text-muted: #5f5576;
         --border-soft: #ddd6f0;
         --primary: #5b3cc4;
+        --primary-2: #7a5af8;
         --shadow-soft: 0 10px 26px rgba(63, 34, 124, 0.08);
         --shadow-card: 0 6px 18px rgba(63, 34, 124, 0.06);
     }
@@ -102,40 +106,47 @@ st.markdown(
     }
 
     .block-container {
-        padding-top: 1.35rem !important;
-        padding-bottom: 2rem !important;
-        max-width: 1320px !important;
+        padding-top: 1.1rem !important;
+        padding-bottom: 1.5rem !important;
+        max-width: 1520px !important;
     }
 
     .app-hero {
         background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
         border-radius: 22px;
-        padding: 1.2rem 1.4rem 1.15rem 1.4rem;
+        padding: 1.1rem 1.4rem 1.05rem 1.4rem;
         color: white;
         box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
-        margin-bottom: 1.1rem;
+        margin-bottom: 0.55rem;
         border: 1px solid rgba(255,255,255,0.16);
     }
 
     .app-hero h1 {
         margin: 0;
-        font-size: 1.9rem;
+        font-size: 1.95rem;
         line-height: 1.15;
         font-weight: 800;
         letter-spacing: -0.02em;
     }
 
     .app-hero p {
-        margin: 0.45rem 0 0 0;
+        margin: 0.42rem 0 0 0;
         font-size: 0.98rem;
-        opacity: 0.95;
+        opacity: 0.96;
+        line-height: 1.45;
+    }
+
+    .app-intro {
+        margin: 0.1rem 0 0.9rem 0.1rem;
+        font-size: 1rem;
+        color: var(--text-muted);
         line-height: 1.45;
     }
 
     .shap-plot-frame {
         border: 1px solid var(--border-soft);
         border-radius: 18px;
-        padding: 0.75rem;
+        padding: 0.55rem;
         background: var(--surface);
         box-shadow: var(--shadow-card);
     }
@@ -150,8 +161,8 @@ st.markdown(
         color: #43307a;
         border: 1px solid #d8cdf7;
         font-weight: 600;
-        margin-top: 0.6rem;
-        margin-bottom: 0.85rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.8rem;
         box-shadow: var(--shadow-card);
     }
 
@@ -189,9 +200,29 @@ st.markdown(
     [data-testid="stFileUploader"] section,
     [data-testid="stSelectbox"] > div,
     [data-testid="stNumberInput"] > div,
-    [data-testid="stTextInput"] > div {
-        background: var(--surface) !important;
+    [data-testid="stTextInput"] > div,
+    [data-baseweb="select"] > div {
+        background: #ffffff !important;
         border-radius: 14px !important;
+        border: 1px solid #d8cdf7 !important;
+        box-shadow: 0 4px 10px rgba(91, 60, 196, 0.05) !important;
+    }
+
+    [data-baseweb="select"] input {
+        color: var(--text-main) !important;
+    }
+
+    [data-baseweb="select"] > div:hover,
+    [data-testid="stTextInput"] > div:hover,
+    [data-testid="stNumberInput"] > div:hover {
+        border-color: #b8a8f1 !important;
+    }
+
+    [data-baseweb="select"] > div:focus-within,
+    [data-testid="stTextInput"] > div:focus-within,
+    [data-testid="stNumberInput"] > div:focus-within {
+        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 3px rgba(91, 60, 196, 0.10) !important;
     }
 
     button[kind="secondary"],
@@ -207,14 +238,29 @@ st.markdown(
     }
 
     button[kind="primary"] {
-        background: linear-gradient(135deg, #5b3cc4 0%, #7a5af8 100%) !important;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 100%) !important;
         color: white !important;
-        border-color: #5b3cc4 !important;
+        border-color: var(--primary) !important;
     }
 
     button[kind="secondary"] {
         background: white !important;
         color: #4b2bbd !important;
+    }
+
+    div[data-testid="stPopover"] button {
+        border-radius: 10px !important;
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        min-width: 220px !important;
+    }
+
+    div[data-testid="stPopover"] * {
+        pointer-events: auto !important;
     }
 
     [data-testid="stDataFrame"] {
@@ -238,16 +284,34 @@ st.markdown(
         box-shadow: var(--shadow-card);
     }
 
-    div[data-testid="stPopover"] button {
-        border-radius: 10px !important;
-    }
-
     .stDownloadButton button {
         background: linear-gradient(135deg, #ffffff 0%, #f4efff 100%) !important;
         color: #4b2bbd !important;
         border-color: #d8cdf7 !important;
     }
+
+    [data-testid="stFileUploaderDropzone"] {
+        min-height: 78px !important;
+        padding-top: 0.45rem !important;
+        padding-bottom: 0.45rem !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] > div {
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.2rem !important;
+        gap: 0.35rem !important;
+    }
+
+    [data-testid="stFileUploaderFile"] {
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.2rem !important;
+    }
+
+    [data-testid="stFileUploaderDeleteBtn"] {
+        margin-top: 0 !important;
+    }
     </style>
+
     """,
     unsafe_allow_html=True,
 )
@@ -257,9 +321,17 @@ st.markdown(
     <div class="app-hero">
         <h1>🎓 Student Dropout Predictor with SHAP Explainer</h1>
         <p>
-            A presentation-ready academic dashboard for training machine learning models,
-            predicting dropout risk, and explaining results through intuitive SHAP-based insights.
+            A dashboard for training machine learning models, predicting dropout risk, and explaining results through intuitive SHAP-based insights.
         </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="app-intro">
+        Upload a CSV file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
     </div>
     """,
     unsafe_allow_html=True,
@@ -693,7 +765,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
         shap_values = np.array(shap_values_obj)
 
     plt.close("all")
-    plt.figure(figsize=(11, 7))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -707,7 +779,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
     plt.close(fig_bar)
 
     plt.close("all")
-    plt.figure(figsize=(11, 7))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -770,19 +842,16 @@ def get_student_id_choices_from_predictions() -> List[str]:
 
 
 def render_centered_chart_help(title: str, help_text: str, heading_level: int = 0):
-    left_col, center_col, right_col = st.columns([3, 2, 1])
-    with left_col:
+    title_col, help_col = st.columns([4.8, 2.0])
+    with title_col:
         if heading_level == 3:
             st.markdown(f"### {title}")
         else:
             st.markdown(f"**{title}**")
-    with center_col:
-        st.write("")
+    with help_col:
         st.write("")
         with st.popover("ℹ️ How to read this chart"):
             st.markdown(help_text)
-    with right_col:
-        st.write("")
 
 
 def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, top_n=3):
@@ -1346,7 +1415,6 @@ def explain_student(chosen_id: str):
 # ============================================================
 # UI
 # ============================================================
-st.title("🎓 Student Dropout Predictor with SHAP Explainer")
 st.write(
     "Upload a CSV file containing student records to train an institution-specific model, "
     "then generate dropout predictions and SHAP-based explanations."
@@ -1356,7 +1424,7 @@ train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict 
 
 with train_tab:
     st.subheader("Train Institution Model")
-    col1, col2 = st.columns([1, 3])
+    col1, col2 = st.columns([1.05, 4.15])
 
     with col1:
         training_file = st.file_uploader(
@@ -1529,7 +1597,7 @@ with predict_tab:
             st.caption(f"Active model: {st.session_state.selected_model_name}")
 
         st.subheader("Upload & Predict")
-        pred_col1, pred_col2 = st.columns([1, 3])
+        pred_col1, pred_col2 = st.columns([1.05, 4.15])
 
         with pred_col1:
             prediction_file = st.file_uploader(
@@ -1629,7 +1697,7 @@ with predict_tab:
 
         st.markdown("---")
         st.subheader("SHAP Explanation for a Specific Student")
-        shap_col1, shap_col2 = st.columns([1, 3])
+        shap_col1, shap_col2 = st.columns([1.05, 4.15])
 
         with shap_col1:
             student_choices = get_student_id_choices_from_predictions()
