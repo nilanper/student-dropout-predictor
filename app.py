@@ -1493,8 +1493,8 @@ with predict_tab:
 
                 recommendations = generate_shap_recommendations(
                     st.session_state.latest_explanation,
-                    row["Prediction"].iloc[0] if "Prediction" in row.columns else "Unknown",
-                    row["Dropout Probability Value"].iloc[0] if "Dropout Probability Value" in row.columns else np.nan,
+                    row["Prediction"] if "Prediction" in row.index else "Unknown",
+                    row["Dropout Probability Value"] if "Dropout Probability Value" in row.index else np.nan,
                 )
                 render_recommendation_box(selected_student_id, recommendations)
 
