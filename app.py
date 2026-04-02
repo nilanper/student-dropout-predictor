@@ -64,6 +64,7 @@ def init_state():
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
+        "global_shap_summary_text": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -156,6 +157,7 @@ def reset_training_state():
     st.session_state.train_success_message = ""
     st.session_state.selected_model_name = None
     st.session_state.model_comparison_df = None
+    st.session_state.global_shap_summary_text = ""
     reset_prediction_state()
 
 
@@ -617,6 +619,184 @@ def render_centered_chart_help(title: str, help_text: str, heading_level: int = 
         st.write("")
 
 
+def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, top_n=3):
+    feature_names = explanation.feature_names
+    shap_values = explanation.values
+
+    items = list(zip(feature_names, shap_values))
+    items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
+
+    risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
+    risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
+
+    def clean_name(name):
+        return str(name).replace("_", " ").strip()
+
+    increasing_text = ", ".join(clean_name(name) for name, _ in risk_increasing) if risk_increasing else "no major factors"
+    reducing_text = ", ".join(clean_name(name) for name, _ in risk_reducing) if risk_reducing else "no major factors"
+
+    summary_html = f"""
+    This student was predicted as <b>{prediction_label}</b> with a dropout probability of <b>{prediction_prob}</b>.<br><br>
+    <b>Factors increasing dropout risk:</b> {increasing_text}<br>
+    <b>Factors reducing dropout risk:</b> {reducing_text}<br><br>
+    """
+
+    if str(prediction_label).lower() == "dropout":
+        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk."
+    else:
+        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk."
+
+    return summary_html
+
+
+def generate_shap_recommendations(explanation, top_n=3):
+    feature_names = explanation.feature_names
+    shap_values = explanation.values
+
+    items = list(zip(feature_names, shap_values))
+    items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
+
+    risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
+
+    recommendation_map = {
+        "attendance": "Encourage better class attendance and monitor absenteeism.",
+        "study hours": "Support the student in improving weekly study time and study habits.",
+        "previous failures": "Provide targeted academic support in subjects where the student previously struggled.",
+        "gpa": "Monitor academic performance closely and consider extra academic support.",
+        "scholarship": "Review whether financial or scholarship-related support may be needed.",
+        "internet": "Check whether the student has adequate access to online learning resources.",
+        "commute": "Check whether long travel time may be affecting attendance or performance.",
+        "travel": "Check whether travel burden may be affecting participation or performance.",
+        "engagement": "Consider closer academic engagement and mentoring support.",
+        "age": "Provide individualized student support based on the student’s broader academic context.",
+    }
+
+    recommendations = []
+    used = set()
+
+    for feature, _ in risk_increasing:
+        clean_feature = str(feature).replace("_", " ").strip().lower()
+
+        for key, advice in recommendation_map.items():
+            if key in clean_feature and advice not in used:
+                recommendations.append(advice)
+                used.add(advice)
+                break
+
+    if not recommendations:
+        recommendations.append(
+            "Consider providing general academic advising, attendance monitoring, and early support follow-up."
+        )
+
+    return recommendations
+
+
+def render_summary_box(student_id: str, summary_html: str):
+    st.markdown(
+        f"""
+        <div style="
+            padding: 0.9rem 1rem;
+            border-radius: 0.6rem;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        ">
+            <div style="font-weight: 700; margin-bottom: 0.45rem;">
+                Summary explanation for Student ID {student_id}
+            </div>
+            <div style="line-height: 1.6;">
+                {summary_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_recommendation_box(student_id: str, recommendations):
+    rec_html = "".join([f"<li>{rec}</li>" for rec in recommendations])
+
+    st.markdown(
+        f"""
+        <div style="
+            padding: 0.9rem 1rem;
+            border-radius: 0.6rem;
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fde68a;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        ">
+            <div style="font-weight: 700; margin-bottom: 0.45rem;">
+                Recommendations for Student ID {student_id}
+            </div>
+            <ul style="margin-top: 0.35rem; padding-left: 1.2rem; line-height: 1.6;">
+                {rec_html}
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarray, top_n: int = 5):
+    mean_abs = np.mean(np.abs(shap_values), axis=0)
+    mean_signed = np.mean(shap_values, axis=0)
+
+    feature_importance = list(zip(feature_names, mean_abs, mean_signed))
+    feature_importance.sort(key=lambda x: x[1], reverse=True)
+
+    top_features = feature_importance[:top_n]
+    increasing = [name for name, _, signed in feature_importance if signed > 0][:top_n]
+    reducing = [name for name, _, signed in feature_importance if signed < 0][:top_n]
+
+    def clean_name(name):
+        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ").strip()
+        return label
+
+    top_features_text = ", ".join(clean_name(name) for name, _, _ in top_features) if top_features else "no major factors"
+    increasing_text = ", ".join(clean_name(name) for name in increasing) if increasing else "no clear overall risk-increasing factors"
+    reducing_text = ", ".join(clean_name(name) for name in reducing) if reducing else "no clear overall risk-reducing factors"
+
+    summary_html = f"""
+The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
+Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
+Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
+Overall, these patterns suggest the institution should pay close attention to attendance, academic performance,
+prior academic difficulty, and study behaviour when identifying students who may need support.
+"""
+
+    return summary_html
+
+
+def render_global_summary_box(summary_html: str):
+    summary_html = str(summary_html).replace("<div>", "").replace("</div>", "")
+
+    st.markdown(
+        f"""
+        <div style="
+            padding: 0.9rem 1rem;
+            border-radius: 0.6rem;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border: 1px solid #bfdbfe;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        ">
+            <div style="font-weight: 700; margin-bottom: 0.45rem;">
+                SHAP Explanation - Overall Summary
+            </div>
+            <div style="line-height: 1.6;">
+                {summary_html}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 
 def train_institution_model(
     df: pd.DataFrame,
@@ -725,6 +905,18 @@ def train_institution_model(
         feature_names,
     )
 
+    global_shap_values_obj = global_explainer(X_shap_sample)
+    if hasattr(global_shap_values_obj, "values"):
+        global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
+    else:
+        global_shap_values = np.array(global_shap_values_obj)
+
+    global_shap_summary_text = generate_global_shap_summary(
+        feature_names,
+        global_shap_values,
+        top_n=5,
+    )
+
     render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
@@ -741,6 +933,7 @@ def train_institution_model(
     st.session_state.selected_model_name = best_model_name
     st.session_state.model_comparison_df = comparison_df
     st.session_state.selection_metric = selection_metric
+    st.session_state.global_shap_summary_text = global_shap_summary_text
 
     if model_choice == "Run all 4 and choose the best":
         st.session_state.train_success_message = (
@@ -944,6 +1137,8 @@ with train_tab:
 
         if st.session_state.train_success_message:
             st.success(st.session_state.train_success_message)
+            if st.session_state.global_shap_summary_text:
+                render_global_summary_box(st.session_state.global_shap_summary_text)
 
     with col2:
         st.markdown("### Model Performance Metrics")
@@ -985,11 +1180,15 @@ This chart shows **importance only**, not direction.
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
-- Red dots usually indicate **higher feature values**
-- Blue dots usually indicate **lower feature values**
+- Features are ordered by **importance (top = most important)**
 
-Dots to the **right** tend to increase dropout risk.  
-Dots to the **left** tend to decrease dropout risk.
+🔴 **Red dots** → higher feature values  
+🔵 **Blue dots** → lower feature values  
+
+➡️ Dots to the **right** increase dropout risk  
+⬅️ Dots to the **left** reduce dropout risk  
+
+The wider the spread, the stronger the feature's overall impact.
 """,
                 )
                 if st.session_state.global_summary_plot_bytes is not None:
@@ -1163,16 +1362,47 @@ with predict_tab:
                 else:
                     st.error(st.session_state.explain_status)
 
+            if (
+                st.session_state.latest_explanation is not None
+                and st.session_state.predict_df is not None
+                and selected_student_id
+                and st.session_state.explain_status.startswith("✅")
+            ):
+                student_id_col = st.session_state.student_id_column
+                row = st.session_state.predict_df[
+                    st.session_state.predict_df[student_id_col].astype(str) == str(selected_student_id)
+                ].iloc[0]
+
+                pred_label = row["Prediction"]
+                pred_prob = format_probability(row["Dropout Probability Value"])
+
+                summary_html = generate_plain_language_shap_summary(
+                    st.session_state.latest_explanation,
+                    pred_label,
+                    pred_prob,
+                )
+                render_summary_box(selected_student_id, summary_html)
+
+                recommendations = generate_shap_recommendations(st.session_state.latest_explanation)
+                render_recommendation_box(selected_student_id, recommendations)
+
         with shap_col2:
             render_centered_chart_help(
                 "Individual SHAP Waterfall Plot",
                 """
-This plot explains **why this specific student** was predicted as Dropout or No Dropout.
+This chart explains **why this specific student received their prediction**.
 
-- Bars pushing to the **right** increase dropout risk
-- Bars pushing to the **left** decrease dropout risk
-- Larger bars mean a **stronger effect**
-- The final prediction is based on the combined effect of all displayed factors
+- The starting point is the **average dropout risk** indicated by **E[f(x)]**
+- Each feature pushes the dropout risk **higher or lower**
+
+🔴 **Red bars** → increase dropout risk  
+🔵 **Blue bars** → decrease dropout risk  
+
+➡️ Bars pushing to the **right** increase risk  
+⬅️ Bars pushing to the **left** reduce risk  
+
+- Longer bars mean a **stronger influence** on the prediction  
+- The final dropout risk indicated by **f(x)** is based on the combined effect of all displayed factors
 """,
                 heading_level=3,
             )
