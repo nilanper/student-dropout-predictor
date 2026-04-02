@@ -130,8 +130,8 @@ st.markdown(
     padding-top: 1.05rem !important;
     padding-bottom: 1.5rem !important;
     max-width: none !important;
-    padding-left: 0.6rem !important;
-    padding-right: 0.6rem !important;
+    padding-left: 1.8rem !important;
+    padding-right: 1.8rem !important;
 }
 
 .app-hero {
@@ -1704,7 +1704,7 @@ with predict_tab:
 
         st.markdown("---")
         st.subheader("SHAP Explanation for a Specific Student")
-        shap_col1, shap_col2 = st.columns([1.05, 4.15])
+        shap_col1, shap_col2 = st.columns([1, 3])
 
         with shap_col1:
             student_choices = get_student_id_choices_from_predictions()
