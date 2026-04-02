@@ -730,14 +730,14 @@ def generate_shap_recommendations(explanation, prediction_label, prediction_prob
         return re.sub(r"</?b>", "", label_html)
 
     def format_feature_list(names):
-        cleaned = [get_plain_display_label(name) for name in names if str(name).strip()]
+        cleaned = [clean_name(name) for name in names if str(name).strip()]
         if not cleaned:
             return "no major factors"
         if len(cleaned) == 1:
             return cleaned[0]
         if len(cleaned) == 2:
             return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
 
     recommendations = []
 
@@ -884,7 +884,7 @@ def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarr
             return cleaned[0]
         if len(cleaned) == 2:
             return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
 
     top_feature_names = [name for name, _, _ in top_features]
     top_features_text = format_feature_list(top_feature_names)
