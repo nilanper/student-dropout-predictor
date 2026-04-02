@@ -142,6 +142,9 @@ st.markdown(
     box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
     margin-bottom: 0.55rem;
     border: 1px solid rgba(255,255,255,0.16);
+    position: sticky;
+    top: 0;
+    z-index: 1002;
 }
 
 .app-hero h1 {
@@ -166,6 +169,11 @@ st.markdown(
     font-size: 1rem;
     color: var(--text-muted);
     line-height: 1.45;
+    position: sticky;
+    top: 112px;
+    z-index: 1001;
+    background: var(--app-bg);
+    padding: 0.35rem 0 0.45rem 0;
 }
 
 .shap-plot-frame {
@@ -209,6 +217,15 @@ st.markdown(
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-main);
     letter-spacing: -0.02em;
+}
+
+[data-testid="stTabs"] {
+    position: sticky;
+    top: 162px;
+    z-index: 1000;
+    background: var(--app-bg);
+    padding-top: 0.2rem;
+    box-shadow: 0 2px 8px rgba(63, 34, 124, 0.06);
 }
 
 [data-testid="stTabs"] button {
