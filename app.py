@@ -761,12 +761,12 @@ def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarr
     reducing_text = ", ".join(clean_name(name) for name in reducing) if reducing else "no clear overall risk-reducing factors"
 
     summary_html = f"""
-    The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
-    Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
-    Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
-    Overall, these patterns suggest the institution should pay close attention to attendance, academic performance,
-    prior academic difficulty, and study behaviour when identifying students who may need support.
-    """
+The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
+Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br>
+Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
+Overall, these patterns suggest the institution should pay close attention to attendance, academic performance,
+prior academic difficulty, and study behaviour when identifying students who may need support.
+"""
 
     return summary_html
 
@@ -1178,11 +1178,15 @@ This chart shows **importance only**, not direction.
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
-- Red dots usually indicate **higher feature values**
-- Blue dots usually indicate **lower feature values**
+- Features are ordered by **importance (top = most important)**
 
-Dots to the **right** tend to increase dropout risk.  
-Dots to the **left** tend to decrease dropout risk.
+🔴 **Red dots** → higher feature values  
+🔵 **Blue dots** → lower feature values  
+
+➡️ Dots to the **right** increase dropout risk  
+⬅️ Dots to the **left** reduce dropout risk  
+
+The wider the spread, the stronger the feature's overall impact.
 """,
                 )
                 if st.session_state.global_summary_plot_bytes is not None:
