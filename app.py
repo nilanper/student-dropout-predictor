@@ -135,17 +135,12 @@ st.markdown(
 }
 
 .app-hero {
-    position: fixed;
-    top: 0.55rem;
-    left: 1.7rem;
-    right: 1.7rem;
-    z-index: 1002;
     background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
     border-radius: 22px;
-    padding: 1.35rem 1.35rem 0.95rem 1.35rem;
+    padding: 1.8rem 1.35rem 1.05rem 1.35rem;
     color: white;
     box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
-    margin-bottom: 0;
+    margin-bottom: 0.55rem;
     border: 1px solid rgba(255,255,255,0.16);
 }
 
@@ -167,17 +162,10 @@ st.markdown(
 }
 
 .app-intro {
-    position: fixed;
-    top: 118px;
-    left: 3.2rem;
-    right: 2.8rem;
-    z-index: 1001;
-    margin: 0;
+    margin: 0.1rem 0 0.9rem 1rem;
     font-size: 1rem;
     color: var(--text-muted);
     line-height: 1.45;
-    background: var(--app-bg);
-    padding: 0.2rem 0 0.45rem 0;
 }
 
 .shap-plot-frame {
@@ -221,17 +209,6 @@ st.markdown(
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-main);
     letter-spacing: -0.02em;
-}
-
-[data-testid="stTabs"] {
-    position: fixed;
-    top: 154px;
-    left: 3.2rem;
-    right: 2.8rem;
-    z-index: 1000;
-    background: var(--app-bg);
-    padding-top: 0.15rem;
-    box-shadow: 0 2px 8px rgba(63, 34, 124, 0.06);
 }
 
 [data-testid="stTabs"] button {
@@ -799,7 +776,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
         shap_values = np.array(shap_values_obj)
 
     plt.close("all")
-    plt.figure(figsize=(12.2, 8.2))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -813,7 +790,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
     plt.close(fig_bar)
 
     plt.close("all")
-    plt.figure(figsize=(12.2, 8.2))
+    plt.figure(figsize=(13.8, 8.2))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -838,7 +815,7 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(11.5, 8.2 + max_len * 0.075), 15.5)
+    fig_width = min(max(13, 9 + max_len * 0.08), 18)
     fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
 
