@@ -673,6 +673,7 @@ def generate_plain_language_shap_summary(explanation, prediction_label, predicti
 
     return summary_html
 
+
 def generate_shap_recommendations(explanation, top_n=3):
     feature_names = explanation.feature_names
     shap_values = explanation.values
@@ -682,38 +683,73 @@ def generate_shap_recommendations(explanation, top_n=3):
 
     risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
 
-    recommendation_map = {
-        "attendance": "Encourage better class attendance and monitor absenteeism.",
-        "study hours": "Support the student in improving weekly study time and study habits.",
-        "previous failures": "Provide targeted academic support in subjects where the student previously struggled.",
-        "gpa": "Monitor academic performance closely and consider extra academic support.",
-        "scholarship": "Review whether financial or scholarship-related support may be needed.",
-        "internet": "Check whether the student has adequate access to online learning resources.",
-        "commute": "Check whether long travel time may be affecting attendance or performance.",
-        "travel": "Check whether travel burden may be affecting participation or performance.",
-        "engagement": "Consider closer academic engagement and mentoring support.",
-        "age": "Provide individualized student support based on the student’s broader academic context.",
-    }
+    def clean_name(name):
+        name = str(name).replace("num__", "").replace("cat__", "").strip()
+        if "_" in name:
+            parts = name.split("_")
+            if len(parts) >= 2:
+                base = parts[0].replace("_", " ").strip()
+                category = " ".join(parts[1:]).replace("_", " ").strip()
+                return f"{base} ({category})"
+        return name.replace("_", " ").strip()
+
+    def format_feature_list(names):
+        cleaned = [clean_name(name) for name in names if str(name).strip()]
+        if not cleaned:
+            return "no major factors"
+        if len(cleaned) == 1:
+            return cleaned[0]
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}"
 
     recommendations = []
-    used = set()
 
-    for feature, _ in risk_increasing:
-        clean_feature = str(feature).lower()
-        base_feature = clean_feature.split("_")[0]
+    if risk_increasing:
+        top_feature_names = [name for name, _ in risk_increasing]
+        top_features_text = format_feature_list(top_feature_names)
 
-        for key, advice in recommendation_map.items():
-            if (key in clean_feature or key in base_feature) and advice not in used:
-                recommendations.append(advice)
-                used.add(advice)
-                break
-
-    if not recommendations:
         recommendations.append(
-            "Consider providing general academic advising, attendance monitoring, and early support follow-up."
+            f"The main factors increasing this student’s dropout risk are {top_features_text}. "
+            f"The institution may wish to review these areas closely and consider targeted support."
         )
 
-    return recommendations
+        for name, _ in risk_increasing:
+            feature_label = clean_name(name)
+            recommendations.append(
+                f"{feature_label} appears to be contributing to this student’s dropout risk and may require closer attention."
+            )
+    else:
+        risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
+
+        if risk_reducing:
+            top_feature_names = [name for name, _ in risk_reducing]
+            top_features_text = format_feature_list(top_feature_names)
+
+            recommendations.append(
+                f"The main factors supporting this student’s continued enrollment are {top_features_text}. "
+                f"The institution should continue to maintain and reinforce these strengths."
+            )
+
+            for name, _ in risk_reducing:
+                feature_label = clean_name(name)
+                recommendations.append(
+                    f"{feature_label} is contributing positively to this student’s outcome and should be sustained."
+                )
+        else:
+            recommendations.append(
+                "No strong contributing factors were identified among the top SHAP features for this prediction."
+            )
+
+    unique_recommendations = []
+    seen = set()
+    for rec in recommendations:
+        if rec not in seen:
+            unique_recommendations.append(rec)
+            seen.add(rec)
+
+    return unique_recommendations
+
 
 def render_summary_box(student_id: str, summary_html: str):
     st.markdown(
