@@ -3,7 +3,6 @@ import os
 import re
 import tempfile
 import warnings
-from math import prod
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -16,11 +15,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.utils.class_weight import compute_sample_weight
 
 warnings.filterwarnings("ignore")
 
@@ -629,54 +627,8 @@ def compute_metrics(y_true, y_pred, y_prob):
     }
 
 
-MODEL_RANDOM_SEARCH_ITERATIONS = {
-    "Logistic Regression": 6,
-    "Random Forest": 8,
-    "XGBoost": 8,
-    "Neural Network": 6,
-}
 
-
-def get_scoring_name(metric_name: str) -> str:
-    metric_map = {
-        "Accuracy": "accuracy",
-        "Precision": "precision",
-        "Recall": "recall",
-        "F1 Score": "f1",
-        "ROC AUC": "roc_auc",
-    }
-    return metric_map.get(metric_name, "f1")
-
-
-
-def get_cv_splitter(y: pd.Series):
-    class_counts = pd.Series(y).value_counts()
-    if class_counts.empty:
-        return None
-
-    min_class_count = int(class_counts.min())
-    if min_class_count < 2:
-        return None
-
-    n_splits = min(3, min_class_count)
-    if n_splits < 2:
-        return None
-
-    return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-
-
-
-def get_xgb_scale_pos_weight(y_train) -> float:
-    y_series = pd.Series(y_train)
-    positives = int((y_series == 1).sum())
-    negatives = int((y_series == 0).sum())
-    if positives <= 0 or negatives <= 0:
-        return 1.0
-    return max(float(negatives) / float(positives), 1.0)
-
-
-
-def get_model_by_name(model_name: str, y_train=None):
+def get_model_by_name(model_name: str):
     if model_name == "XGBoost":
         if XGBClassifier is None:
             raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
@@ -689,7 +641,6 @@ def get_model_by_name(model_name: str, y_train=None):
             objective="binary:logistic",
             eval_metric="logloss",
             random_state=42,
-            scale_pos_weight=get_xgb_scale_pos_weight(y_train) if y_train is not None else 1.0,
         )
 
     if model_name == "Random Forest":
@@ -698,17 +649,12 @@ def get_model_by_name(model_name: str, y_train=None):
             max_depth=10,
             min_samples_split=5,
             min_samples_leaf=2,
-            class_weight="balanced",
             random_state=42,
             n_jobs=-1,
         )
 
     if model_name == "Logistic Regression":
-        return LogisticRegression(
-            max_iter=1000,
-            class_weight="balanced",
-            random_state=42,
-        )
+        return LogisticRegression(max_iter=1000, random_state=42)
 
     if model_name == "Neural Network":
         return MLPClassifier(
@@ -718,9 +664,6 @@ def get_model_by_name(model_name: str, y_train=None):
             alpha=0.0001,
             learning_rate_init=0.001,
             max_iter=500,
-            early_stopping=True,
-            validation_fraction=0.15,
-            n_iter_no_change=15,
             random_state=42,
         )
 
@@ -728,126 +671,14 @@ def get_model_by_name(model_name: str, y_train=None):
 
 
 
-def get_param_distributions(model_name: str):
-    if model_name == "Logistic Regression":
-        return {
-            "C": [0.01, 0.1, 1.0, 5.0, 10.0],
-            "solver": ["lbfgs", "liblinear"],
-        }
-
-    if model_name == "Random Forest":
-        return {
-            "n_estimators": [200, 300, 400],
-            "max_depth": [8, 10, 14, None],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
-            "max_features": ["sqrt", "log2", None],
-        }
-
-    if model_name == "XGBoost":
-        return {
-            "n_estimators": [150, 250, 350],
-            "max_depth": [3, 5, 7],
-            "learning_rate": [0.03, 0.05, 0.1],
-            "subsample": [0.8, 0.9, 1.0],
-            "colsample_bytree": [0.8, 0.9, 1.0],
-            "min_child_weight": [1, 3, 5],
-        }
-
-    if model_name == "Neural Network":
-        return {
-            "hidden_layer_sizes": [(64, 32), (128, 64), (64, 32, 16)],
-            "alpha": [0.0001, 0.001, 0.01],
-            "learning_rate_init": [0.0005, 0.001, 0.005],
-            "batch_size": [32, 64, 128],
-        }
-
-    raise ValueError(f"Unsupported model name: {model_name}")
-
-
-
-def get_fit_kwargs(model_name: str, y_train):
-    # sklearn MLPClassifier in this deployment does not accept sample_weight in fit().
-    # Keep fit kwargs empty to avoid RandomizedSearchCV failures when evaluating all models.
-    return {}
-
-
-
-def tune_model_hyperparameters(model_name, X_train_t, y_train, selection_metric: str):
-    base_model = get_model_by_name(model_name, y_train=y_train)
-    param_distributions = get_param_distributions(model_name)
-    cv_splitter = get_cv_splitter(y_train)
-
-    if cv_splitter is None:
-        return base_model, {}, np.nan
-
-    total_combinations = prod(len(v) for v in param_distributions.values())
-    n_iter = min(MODEL_RANDOM_SEARCH_ITERATIONS.get(model_name, 6), total_combinations)
-
-    search = RandomizedSearchCV(
-        estimator=base_model,
-        param_distributions=param_distributions,
-        n_iter=n_iter,
-        scoring=get_scoring_name(selection_metric),
-        cv=cv_splitter,
-        random_state=42,
-        n_jobs=-1,
-        refit=True,
-    )
-    fit_kwargs = get_fit_kwargs(model_name, y_train)
-    search.fit(X_train_t, y_train, **fit_kwargs)
-
-    return search.best_estimator_, search.best_params_, float(search.best_score_)
-
-
-
-def fit_model_with_optional_early_stopping(model_name, model, X_train_t, y_train):
-    fit_kwargs = get_fit_kwargs(model_name, y_train)
-
-    if model_name == "XGBoost":
-        stratify_y = y_train if len(np.unique(y_train)) == 2 else None
-        X_fit, X_val, y_fit, y_val = train_test_split(
-            X_train_t,
-            y_train,
-            test_size=0.15,
-            random_state=42,
-            stratify=stratify_y,
-        )
-
-        model.set_params(early_stopping_rounds=20)
-        model.fit(X_fit, y_fit, eval_set=[(X_val, y_val)], verbose=False)
-
-        best_iteration = getattr(model, "best_iteration", None)
-        if best_iteration is not None:
-            final_n_estimators = max(int(best_iteration) + 1, 25)
-            final_model = get_model_by_name(model_name, y_train=y_train)
-            final_params = model.get_params()
-            final_params.pop("early_stopping_rounds", None)
-            final_model.set_params(**{k: v for k, v in final_params.items() if k in final_model.get_params()})
-            final_model.set_params(n_estimators=final_n_estimators)
-            final_model.fit(X_train_t, y_train, verbose=False)
-            return final_model
-
-        return model
-
-    model.fit(X_train_t, y_train, **fit_kwargs)
-    return model
-
-
-
-def train_single_model(model_name, X_train_t, X_test_t, y_train, y_test, selection_metric):
-    tuned_model, best_params, cv_best_score = tune_model_hyperparameters(
-        model_name,
-        X_train_t,
-        y_train,
-        selection_metric,
-    )
-    model = fit_model_with_optional_early_stopping(model_name, tuned_model, X_train_t, y_train)
+def train_single_model(model_name, X_train_t, X_test_t, y_train, y_test):
+    model = get_model_by_name(model_name)
+    model.fit(X_train_t, y_train)
 
     y_prob = model.predict_proba(X_test_t)[:, 1]
     y_pred = (y_prob >= 0.5).astype(int)
     metrics = compute_metrics(y_test, y_pred, y_prob)
-    return model, metrics, best_params, cv_best_score
+    return model, metrics
 
 
 
@@ -1405,14 +1236,7 @@ def train_institution_model(
 
     for idx, name in enumerate(candidate_models, start=1):
         render_training_status(status_placeholder, f"Training models... ({idx}/{len(candidate_models)}) {name}")
-        model, metrics, best_params, cv_best_score = train_single_model(
-            name,
-            X_train_t,
-            X_test_t,
-            y_train,
-            y_test,
-            selection_metric,
-        )
+        model, metrics = train_single_model(name, X_train_t, X_test_t, y_train, y_test)
         trained_models[name] = model
         comparison_rows.append({
             "Model": name,
