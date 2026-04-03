@@ -767,8 +767,8 @@ def get_param_distributions(model_name: str):
 
 
 def get_fit_kwargs(model_name: str, y_train):
-    if model_name == "Neural Network":
-        return {"sample_weight": compute_sample_weight(class_weight="balanced", y=y_train)}
+    # sklearn MLPClassifier in this deployment does not accept sample_weight in fit().
+    # Keep fit kwargs empty to avoid RandomizedSearchCV failures when evaluating all models.
     return {}
 
 
