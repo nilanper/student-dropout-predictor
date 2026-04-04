@@ -352,9 +352,9 @@ div[data-testid="stPopover"] * {
 )
 
 
-
 def read_csv_flexible(file):
     try:
+        file.seek(0)
         return pd.read_csv(file, sep=None, engine="python")
     except Exception:
         file.seek(0)
@@ -362,7 +362,7 @@ def read_csv_flexible(file):
             return pd.read_csv(file, sep=";")
         except Exception:
             file.seek(0)
-            return read_csv_flexible(file)
+            return pd.read_csv(file)
 
 # ============================================================
 # Utility functions
@@ -1637,7 +1637,13 @@ with train_tab:
 
         if training_file is not None:
             try:
-                training_df_preview = pd.read_csv(training_file)
+                training_df_preview = read_csv_flexible(training_file)
+                if training_df_preview.shape[1] == 1:
+                    st.error(
+                        "❌ The uploaded file could not be properly processed. "
+                        "Please check that it is a valid CSV file with multiple columns."
+                    )
+                    st.stop()
                 training_df_preview.columns = training_df_preview.columns.str.strip()
                 columns = training_df_preview.columns.tolist()
                 guessed_id, guessed_name = infer_id_and_name_columns(training_df_preview)
@@ -1812,7 +1818,13 @@ with predict_tab:
 
             if prediction_file is not None:
                 try:
-                    prediction_df_preview = pd.read_csv(prediction_file)
+                    prediction_df_preview = read_csv_flexible(prediction_file)
+                    if prediction_df_preview.shape[1] == 1:
+                        st.error(
+                            "❌ The uploaded file could not be properly processed. "
+                            "Please check that it is a valid CSV file with multiple columns."
+                        )
+                        st.stop()
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
                     prediction_file_is_valid, prediction_validation_message, missing_cols, extra_cols = (
                         validate_prediction_columns(prediction_df_preview)
