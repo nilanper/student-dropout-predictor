@@ -351,18 +351,49 @@ div[data-testid="stPopover"] * {
     unsafe_allow_html=True,
 )
 
+import csv
+
 
 def read_csv_flexible(file):
+    raw = file.getvalue() if hasattr(file, "getvalue") else file.read()
+    if hasattr(file, "seek"):
+        file.seek(0)
+
+    if raw is None:
+        raise ValueError("Uploaded file could not be read.")
+
+    if isinstance(raw, str):
+        raw_bytes = raw.encode("utf-8")
+    else:
+        raw_bytes = raw
+
     try:
-        file.seek(0)
-        return pd.read_csv(file, sep=None, engine="python")
+        sample_text = raw_bytes[:8192].decode("utf-8-sig")
     except Exception:
-        file.seek(0)
+        sample_text = raw_bytes[:8192].decode("latin1", errors="ignore")
+
+    try:
+        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "\t", "|"])
+        detected_sep = dialect.delimiter
+    except Exception:
+        header_line = sample_text.splitlines()[0] if sample_text.splitlines() else ""
+        delimiter_counts = {
+            ",": header_line.count(","),
+            ";": header_line.count(";"),
+            "\t": header_line.count("\t"),
+            "|": header_line.count("|"),
+        }
+        detected_sep = max(delimiter_counts, key=delimiter_counts.get)
+        if delimiter_counts[detected_sep] == 0:
+            detected_sep = ","
+
+    for encoding in ["utf-8-sig", "utf-8", "latin1"]:
         try:
-            return pd.read_csv(file, sep=";")
+            return pd.read_csv(io.BytesIO(raw_bytes), sep=detected_sep, encoding=encoding)
         except Exception:
-            file.seek(0)
-            return pd.read_csv(file)
+            continue
+
+    raise ValueError("The uploaded file could not be properly processed.")
 
 # ============================================================
 # Utility functions
