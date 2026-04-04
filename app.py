@@ -395,6 +395,26 @@ def read_csv_flexible(file):
 
     raise ValueError("The uploaded file could not be properly processed.")
 
+
+
+def read_uploaded_table(file):
+    file_name = getattr(file, "name", "").lower()
+
+    if file_name.endswith(".csv"):
+        return read_csv_flexible(file)
+
+    if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+        try:
+            if hasattr(file, "seek"):
+                file.seek(0)
+            return pd.read_excel(file)
+        except ImportError:
+            raise ValueError("Excel support is not available. Please upload a CSV file.")
+        except Exception as e:
+            raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
+
+    raise ValueError("Unsupported file format. Please upload a CSV or Excel file.")
+
 # ============================================================
 # Utility functions
 # ============================================================
@@ -1656,7 +1676,7 @@ with train_tab:
     with col1:
         training_file = st.file_uploader(
             "📄 Upload Labeled Training CSV",
-            type=["csv"],
+            type=["csv", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
         )
@@ -1668,7 +1688,7 @@ with train_tab:
 
         if training_file is not None:
             try:
-                training_df_preview = read_csv_flexible(training_file)
+                training_df_preview = read_uploaded_table(training_file)
                 if training_df_preview.shape[1] == 1:
                     st.error(
                         "❌ The uploaded file could not be properly processed. "
@@ -1836,7 +1856,7 @@ with predict_tab:
         with pred_col1:
             prediction_file = st.file_uploader(
                 "📄 Upload new Student CSV File to get predictions",
-                type=["csv"],
+                type=["csv", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
             )
@@ -1849,7 +1869,7 @@ with predict_tab:
 
             if prediction_file is not None:
                 try:
-                    prediction_df_preview = read_csv_flexible(prediction_file)
+                    prediction_df_preview = read_uploaded_table(prediction_file)
                     if prediction_df_preview.shape[1] == 1:
                         st.error(
                             "❌ The uploaded file could not be properly processed. "
