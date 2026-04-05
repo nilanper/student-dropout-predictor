@@ -403,6 +403,21 @@ def format_delimiter_display(delimiter):
     return display_map.get(delimiter, delimiter)
 
 
+def get_excel_sheet_names(file):
+    try:
+        if hasattr(file, "seek"):
+            file.seek(0)
+        excel_file = pd.ExcelFile(file)
+        sheet_names = excel_file.sheet_names
+        if hasattr(file, "seek"):
+            file.seek(0)
+        return sheet_names
+    except ImportError:
+        raise ValueError("Excel support is not available. Please upload a data file.")
+    except Exception as e:
+        raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
+
+
 def read_csv_flexible(file):
     raw = file.getvalue() if hasattr(file, "getvalue") else file.read()
     if hasattr(file, "seek"):
@@ -1088,7 +1103,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
 
 
 
-def build_shap_figure(explanation, max_display: int = 10):
+def build_shap_figure(explanation, max_display: int = 8):
     plt.close("all")
     shap.plots.waterfall(explanation, max_display=max_display, show=False)
     fig = plt.gcf()
@@ -1097,12 +1112,12 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(11.5, 8.2 + max_len * 0.075), 15.5)
-    fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
+    fig_width = min(max(13, 9 + max_len * 0.08), 17)
+    fig_height = min(max(5.8, 0.50 * max_display + 2.0), 7.8)
     fig.set_size_inches(fig_width, fig_height)
 
     left_margin = min(max(0.30, max_len * 0.008), 0.50)
-    fig.subplots_adjust(left=left_margin, right=0.98, top=0.92, bottom=0.14)
+    fig.subplots_adjust(left=left_margin, right=0.96, top=0.90, bottom=0.18)
 
     ax.tick_params(axis="y", labelsize=10)
     ax.tick_params(axis="x", labelsize=10)
@@ -1113,7 +1128,7 @@ def build_shap_figure(explanation, max_display: int = 10):
 def figure_to_png_bytes(fig) -> bytes:
     buffer = io.BytesIO()
     try:
-        fig.savefig(buffer, format="png", dpi=180, bbox_inches="tight", pad_inches=0.35)
+        fig.savefig(buffer, format="png", dpi=180, bbox_inches="tight", pad_inches=0.5)
     except Exception:
         buffer = io.BytesIO()
         fig.savefig(buffer, format="png", dpi=160)
@@ -1700,7 +1715,7 @@ def explain_student(chosen_id: str):
         get_transformed_feature_names(st.session_state.preprocessor),
     )
 
-    fig = build_shap_figure(explanation)
+    fig = build_shap_figure(explanation, max_display=8)
     plot_bytes = figure_to_png_bytes(fig)
     plt.close(fig)
 
@@ -1724,7 +1739,7 @@ with train_tab:
 
     with col1:
         training_file = st.file_uploader(
-            "📄 Upload Labeled Training CSV",
+            "📄 Upload Labeled Training Data File",
             type=["csv", "txt", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
@@ -1734,10 +1749,32 @@ with train_tab:
         student_id_column = None
         student_name_column = None
         training_df_preview = None
+        training_file_info = ""
+        selected_training_sheet = None
 
         if training_file is not None:
             try:
-                training_df_preview = read_uploaded_table(training_file)
+                training_file_name = getattr(training_file, "name", "").lower()
+
+                if training_file_name.endswith((".xlsx", ".xls")):
+                    training_sheet_names = get_excel_sheet_names(training_file)
+                    if len(training_sheet_names) > 1:
+                        selected_training_sheet = st.selectbox(
+                            "Choose Excel sheet",
+                            training_sheet_names,
+                            key="training_sheet_selector",
+                        )
+                    elif len(training_sheet_names) == 1:
+                        selected_training_sheet = training_sheet_names[0]
+
+                training_df_preview, training_file_info = read_uploaded_table(
+                    training_file,
+                    sheet_name=selected_training_sheet,
+                )
+
+                if training_file_info:
+                    st.caption(training_file_info)
+
                 if training_df_preview.shape[1] == 1:
                     st.error(
                         "❌ The uploaded file could not be properly processed. "
@@ -1904,7 +1941,7 @@ with predict_tab:
 
         with pred_col1:
             prediction_file = st.file_uploader(
-                "📄 Upload new Student CSV File to get predictions",
+                "📄 Upload new Student Data File to get predictions",
                 type=["csv", "txt", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
@@ -1915,14 +1952,36 @@ with predict_tab:
             prediction_validation_message = ""
             missing_cols = []
             extra_cols = []
+            prediction_file_info = ""
+            selected_prediction_sheet = None
 
             if prediction_file is not None:
                 try:
-                    prediction_df_preview = read_uploaded_table(prediction_file)
+                    prediction_file_name = getattr(prediction_file, "name", "").lower()
+
+                    if prediction_file_name.endswith((".xlsx", ".xls")):
+                        prediction_sheet_names = get_excel_sheet_names(prediction_file)
+                        if len(prediction_sheet_names) > 1:
+                            selected_prediction_sheet = st.selectbox(
+                                "Choose Excel sheet",
+                                prediction_sheet_names,
+                                key="prediction_sheet_selector",
+                            )
+                        elif len(prediction_sheet_names) == 1:
+                            selected_prediction_sheet = prediction_sheet_names[0]
+
+                    prediction_df_preview, prediction_file_info = read_uploaded_table(
+                        prediction_file,
+                        sheet_name=selected_prediction_sheet,
+                    )
+
+                    if prediction_file_info:
+                        st.caption(prediction_file_info)
+
                     if prediction_df_preview.shape[1] == 1:
                         st.error(
                             "❌ The uploaded file could not be properly processed. "
-                            "Please check that it is a valid CSV file with multiple columns."
+                            "Please check that it is a valid data file with multiple columns."
                         )
                         st.stop()
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
@@ -2099,25 +2158,26 @@ with predict_tab:
             render_centered_chart_help(
                 "Individual SHAP Waterfall Plot",
                 """
-This plot explains **why this specific student** was predicted as Dropout or No Dropout.
+This plot explains why this specific student was predicted as Dropout or No Dropout.
 
-- Bars pushing to the right ➡️ increase dropout risk
-- Bars pushing to the left ⬅️ decrease dropout risk
+The prediction starts from the baseline E[f(x)] (average dropout probability across all students) and moves step-by-step to the final prediction for this student f(x) based on contributing factors.
 
-- 🔴 Red bars indicate factors increasing dropout risk
-- 🔵 Blue bars indicate factors reducing dropout risk
+Bars pushing to the right ➡️ increase dropout risk  
+Bars pushing to the left ⬅️ decrease dropout risk
 
-- Larger bars mean a **stronger effect**
-- The final prediction is based on the combined effect of all displayed factors
+🔴 Red bars indicate factors increasing dropout risk  
+🔵 Blue bars indicate factors reducing dropout risk
+
+Larger bars mean a stronger effect.
+
+The final prediction f(x) is reached by combining all these effects from the baseline E[f(x)].
 """,
                 heading_level=3,
             )
 
             if st.session_state.latest_plot_bytes is not None:
                 st.markdown('<div class="shap-plot-frame">', unsafe_allow_html=True)
-                plot_container = st.container(height=760, border=False)
-                with plot_container:
-                    st.image(st.session_state.latest_plot_bytes, width="stretch")
+                st.image(st.session_state.latest_plot_bytes, width="stretch")
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
