@@ -1,4 +1,5 @@
 import io
+import csv
 import os
 import re
 import tempfile
@@ -94,7 +95,7 @@ st.markdown(
 st.markdown(
     """
     <div class="app-intro">
-        Upload a CSV file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
+        Upload a Data file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
     </div>
     """,
     unsafe_allow_html=True,
@@ -351,7 +352,55 @@ div[data-testid="stPopover"] * {
     unsafe_allow_html=True,
 )
 
-import csv
+
+def _get_file_bytes(file):
+    raw = file.getvalue() if hasattr(file, "getvalue") else file.read()
+    if hasattr(file, "seek"):
+        file.seek(0)
+
+    if raw is None:
+        raise ValueError("Uploaded file could not be read.")
+
+    if isinstance(raw, str):
+        return raw.encode("utf-8")
+
+    return raw
+
+
+def detect_csv_delimiter(file):
+    raw_bytes = _get_file_bytes(file)
+
+    try:
+        sample_text = raw_bytes[:8192].decode("utf-8-sig")
+    except Exception:
+        sample_text = raw_bytes[:8192].decode("latin1", errors="ignore")
+
+    try:
+        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "\t", "|"])
+        detected_sep = dialect.delimiter
+    except Exception:
+        header_line = sample_text.splitlines()[0] if sample_text.splitlines() else ""
+        delimiter_counts = {
+            ",": header_line.count(","),
+            ";": header_line.count(";"),
+            "\t": header_line.count("\t"),
+            "|": header_line.count("|"),
+        }
+        detected_sep = max(delimiter_counts, key=delimiter_counts.get)
+        if delimiter_counts[detected_sep] == 0:
+            detected_sep = ","
+
+    return detected_sep
+
+
+def format_delimiter_display(delimiter):
+    display_map = {
+        ",": "comma (,)",
+        ";": "semicolon (;)",
+        "\t": "tab (\t)",
+        "|": "pipe (|)",
+    }
+    return display_map.get(delimiter, delimiter)
 
 
 def read_csv_flexible(file):
@@ -1676,7 +1725,7 @@ with train_tab:
     with col1:
         training_file = st.file_uploader(
             "📄 Upload Labeled Training CSV",
-            type=["csv", "xlsx", "xls"],
+            type=["csv", "txt", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
         )
@@ -1692,7 +1741,7 @@ with train_tab:
                 if training_df_preview.shape[1] == 1:
                     st.error(
                         "❌ The uploaded file could not be properly processed. "
-                        "Please check that it is a valid CSV file with multiple columns."
+                        "Please check that it is a valid data file with multiple columns."
                     )
                     st.stop()
                 training_df_preview.columns = training_df_preview.columns.str.strip()
@@ -1856,7 +1905,7 @@ with predict_tab:
         with pred_col1:
             prediction_file = st.file_uploader(
                 "📄 Upload new Student CSV File to get predictions",
-                type=["csv", "xlsx", "xls"],
+                type=["csv", "txt", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
             )
@@ -2050,19 +2099,16 @@ with predict_tab:
             render_centered_chart_help(
                 "Individual SHAP Waterfall Plot",
                 """
-This chart explains **why this specific student received their prediction**.
+This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
-- The starting point is the **average dropout risk** indicated by **E[f(x)]**
-- Each feature pushes the dropout risk **higher or lower**
+- Bars pushing to the right ➡️ increase dropout risk
+- Bars pushing to the left ⬅️ decrease dropout risk
 
-🔴 **Red bars** → increase dropout risk  
-🔵 **Blue bars** → decrease dropout risk  
+- 🔴 Red bars indicate factors increasing dropout risk
+- 🔵 Blue bars indicate factors reducing dropout risk
 
-➡️ Bars pushing to the **right** increase risk  
-⬅️ Bars pushing to the **left** reduce risk  
-
-- Longer bars mean a **stronger influence** on the prediction  
-- The final dropout risk indicated by **f(x)** is based on the combined effect of all displayed factors
+- Larger bars mean a **stronger effect**
+- The final prediction is based on the combined effect of all displayed factors
 """,
                 heading_level=3,
             )
