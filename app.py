@@ -437,14 +437,14 @@ def read_csv_flexible(file):
         sample_text = raw_bytes[:8192].decode("latin1", errors="ignore")
 
     try:
-        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "\t", "|"])
+        dialect = csv.Sniffer().sniff(sample_text, delimiters=[",", ";", "	", "|"])
         detected_sep = dialect.delimiter
     except Exception:
         header_line = sample_text.splitlines()[0] if sample_text.splitlines() else ""
         delimiter_counts = {
             ",": header_line.count(","),
             ";": header_line.count(";"),
-            "\t": header_line.count("\t"),
+            "	": header_line.count("	"),
             "|": header_line.count("|"),
         }
         detected_sep = max(delimiter_counts, key=delimiter_counts.get)
@@ -453,7 +453,8 @@ def read_csv_flexible(file):
 
     for encoding in ["utf-8-sig", "utf-8", "latin1"]:
         try:
-            return pd.read_csv(io.BytesIO(raw_bytes), sep=detected_sep, encoding=encoding)
+            df = pd.read_csv(io.BytesIO(raw_bytes), sep=detected_sep, encoding=encoding)
+            return df, detected_sep
         except Exception:
             continue
 
@@ -461,23 +462,35 @@ def read_csv_flexible(file):
 
 
 
-def read_uploaded_table(file):
+def read_uploaded_table(file, sheet_name=None):
     file_name = getattr(file, "name", "").lower()
 
-    if file_name.endswith(".csv"):
-        return read_csv_flexible(file)
+    if file_name.endswith(".csv") or file_name.endswith(".txt"):
+        df, detected_sep = read_csv_flexible(file)
+        return df, f"Detected delimiter: {format_delimiter_display(detected_sep)}"
 
     if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
         try:
             if hasattr(file, "seek"):
                 file.seek(0)
-            return pd.read_excel(file)
+            selected_sheet = sheet_name if sheet_name is not None else 0
+            df = pd.read_excel(file, sheet_name=selected_sheet)
+            if hasattr(file, "seek"):
+                file.seek(0)
+
+            if sheet_name is None:
+                sheet_names = get_excel_sheet_names(file)
+                selected_sheet_label = sheet_names[0] if sheet_names else "Sheet1"
+            else:
+                selected_sheet_label = sheet_name
+
+            return df, f"Selected sheet: {selected_sheet_label}"
         except ImportError:
-            raise ValueError("Excel support is not available. Please upload a CSV file.")
+            raise ValueError("Excel support is not available. Please upload a data file.")
         except Exception as e:
             raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
-    raise ValueError("Unsupported file format. Please upload a CSV or Excel file.")
+    raise ValueError("Unsupported file format. Please upload a Data File (CSV, TXT, or Excel).")
 
 # ============================================================
 # Utility functions
