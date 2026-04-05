@@ -203,7 +203,7 @@ def get_excel_sheet_names(file):
             file.seek(0)
         return sheet_names
     except ImportError:
-        raise ValueError("Excel support is not available. Please upload a CSV file.")
+        raise ValueError("Excel support is not available. Please upload a data file.")
     except Exception as e:
         raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
@@ -232,11 +232,11 @@ def read_uploaded_table(file, sheet_name=None):
 
             return df, f"Selected sheet: {selected_sheet_label}"
         except ImportError:
-            raise ValueError("Excel support is not available. Please upload a CSV file.")
+            raise ValueError("Excel support is not available. Please upload a data file.")
         except Exception as e:
             raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
-    raise ValueError("Unsupported file format. Please upload a CSV, TXT, or Excel file.")
+    raise ValueError("Unsupported file format. Please upload a Data File (CSV, TXT, or Excel).")
 
 
 # ============================================================
@@ -960,7 +960,7 @@ with train_tab:
 
     with col1:
         training_file = st.file_uploader(
-            "📄 Upload Labeled Training CSV",
+            "📄 Upload Labeled Training Data File",
             type=["csv", "txt", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
@@ -1153,7 +1153,7 @@ with predict_tab:
 
         with pred_col1:
             prediction_file = st.file_uploader(
-                "📄 Upload new Student CSV File to get predictions",
+                "📄 Upload new Student Data File to get predictions",
                 type=["csv", "txt", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
