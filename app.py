@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import shap
 import streamlit as st
+import streamlit.components.v1 as components
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
@@ -561,6 +562,17 @@ def render_training_status(placeholder, message: str):
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def scroll_to_top():
+    components.html(
+        """
+        <script>
+            window.parent.scrollTo({ top: 0, behavior: 'smooth' });
+        </script>
+        """,
+        height=0,
     )
 
 
@@ -1852,6 +1864,7 @@ with train_tab:
                 train_button = st.button("🚀 Train Model", use_container_width=True)
 
                 if train_button:
+                    scroll_to_top()
                     st.session_state.train_metrics = None
                     st.session_state.global_importance_plot_bytes = None
                     st.session_state.global_summary_plot_bytes = None
