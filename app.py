@@ -203,7 +203,7 @@ def get_excel_sheet_names(file):
             file.seek(0)
         return sheet_names
     except ImportError:
-        raise ValueError("Excel support is not available. Please upload a data file.")
+        raise ValueError("Excel support is not available. Please upload a CSV file.")
     except Exception as e:
         raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
@@ -232,11 +232,11 @@ def read_uploaded_table(file, sheet_name=None):
 
             return df, f"Selected sheet: {selected_sheet_label}"
         except ImportError:
-            raise ValueError("Excel support is not available. Please upload a data file.")
+            raise ValueError("Excel support is not available. Please upload a CSV file.")
         except Exception as e:
             raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
-    raise ValueError("Unsupported file format. Please upload a Data File (CSV, TXT, or Excel).")
+    raise ValueError("Unsupported file format. Please upload a CSV, TXT, or Excel file.")
 
 
 # ============================================================
@@ -948,7 +948,7 @@ def explain_student(chosen_id: str):
 # ============================================================
 st.title("🎓 Student Dropout Predictor with SHAP Explainer")
 st.write(
-    "Upload a Data file containing student records to train an institution-specific model, "
+    "Upload a CSV file containing student records to train an institution-specific model, "
     "then generate dropout predictions and SHAP-based explanations."
 )
 
@@ -960,7 +960,7 @@ with train_tab:
 
     with col1:
         training_file = st.file_uploader(
-            "📄 Upload Labeled Training Data File",
+            "📄 Upload Labeled Training CSV",
             type=["csv", "txt", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
@@ -999,7 +999,7 @@ with train_tab:
                 if training_df_preview.shape[1] == 1:
                     raise ValueError(
                         "❌ The uploaded file could not be properly processed. "
-                        "Please check that it is a valid data file with multiple columns."
+                        "Please check that it is a valid CSV file with multiple columns."
                     )
 
                 training_df_preview.columns = training_df_preview.columns.str.strip()
@@ -1038,13 +1038,12 @@ with train_tab:
                 model_choice = st.selectbox(
                     "Model Selection",
                     [
-                        "Logistic Regression",
-                        "Random Forest",
                         "XGBoost",
+                        "Random Forest",
+                        "Logistic Regression",
                         "Neural Network",
                         "Run all 4 and choose the best",
                     ],
-                    index=0,
                 )
 
                 selection_metric = st.selectbox(
@@ -1154,7 +1153,7 @@ with predict_tab:
 
         with pred_col1:
             prediction_file = st.file_uploader(
-                "📄 Upload new Student Data File to get predictions",
+                "📄 Upload new Student CSV File to get predictions",
                 type=["csv", "txt", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
@@ -1194,7 +1193,7 @@ with predict_tab:
                     if prediction_df_preview.shape[1] == 1:
                         raise ValueError(
                             "❌ The uploaded file could not be properly processed. "
-                            "Please check that it is a valid data file with multiple columns."
+                            "Please check that it is a valid CSV file with multiple columns."
                         )
 
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
