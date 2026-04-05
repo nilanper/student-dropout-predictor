@@ -1046,14 +1046,11 @@ with train_tab:
                     ],
                 )
 
-                if model_choice == "Run all 4 and choose the best":
-                    selection_metric = st.selectbox(
-                        "Metric to Select the Best Model",
-                        ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
-                        index=0,
-                    )
-                else:
-                    selection_metric = "F1 Score"
+                selection_metric = st.selectbox(
+                    "Best Model Selection Metric",
+                    ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
+                    index=0,
+                )
 
                 train_button = st.button("🚀 Train Model", use_container_width=True)
                 training_status_placeholder = st.empty()
@@ -1358,207 +1355,194 @@ This plot explains **why this specific student** was predicted as Dropout or No 
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
 
 
+
+# ============================================================
+# User Guide Tab
+# ============================================================
+def _guide_image_path(filename: str) -> str:
+    return os.path.join(os.path.dirname(__file__), filename)
+
+
+def safe_guide_image(filename: str, caption: str):
+    img_path = _guide_image_path(filename)
+    if os.path.exists(img_path):
+        st.image(img_path, caption=caption, width="stretch")
+    else:
+        st.caption(f"Screenshot not found: {filename}")
+
+
 with guide_tab:
     st.header("📘 User Guide")
 
     with st.expander("1️⃣ Overview of the System", expanded=True):
         st.markdown("""
-This system is designed for educational institutions to:
+This system is designed for **individual educational institutions** to:
 
-- Train machine learning models using **historical student data**
+- Train machine learning models using their **historical student data**
 - Predict **dropout risk of current students**
 - Understand **why students are at risk** using SHAP explanations
 
-Each institution builds its **own customized model**, making predictions specific to its data.
+Each institution builds its **own customized model**, making predictions specific to their own data.
 """)
 
     with st.expander("2️⃣ Data Requirements & File Support"):
         st.markdown("""
 **Supported formats:**
-- CSV (.csv)
-- Text (.txt)
-- Excel (.xlsx, .xls)
+- CSV (`.csv`)
+- Text (`.txt`)
+- Excel (`.xlsx`, `.xls`)
 
 **Excel files:**
-- If multiple sheets exist, you must select the correct sheet
+- If multiple sheets exist, select the correct sheet containing the student dataset
 
 **Delimiter detection:**
-- The system automatically detects comma, semicolon, tab, and pipe delimiters for CSV/TXT files
+- The system automatically detects delimiters such as comma, semicolon, and tab
 
 **Flexible structure:**
-- Supports datasets of any shape (any number of rows / columns)
+- Supports datasets of any shape (any number of rows and columns)
 """)
 
     with st.expander("3️⃣ Important Rule for Prediction Files"):
         st.markdown("""
-The prediction file must match the training file exactly:
+The prediction file must match the training file structure exactly:
 
 - Same column names
 - No missing columns
 - No extra columns
 
-If not, you will see **Upload file incompatibility**.
+If not, the system will show:
+**Upload file incompatibility**
 
-👉 Fix the file, then re-upload it using **Upload new Student Data File to get predictions**.
+Correct the file and re-upload it.
 """)
 
     with st.expander("4️⃣ Application Structure"):
         st.markdown("""
 **Tab 1 – Train Institution Model**
 - Upload training data
-- Train the model
-- View performance and global SHAP outputs
+- Train machine learning models
+- View performance metrics and global SHAP explanations
 
 **Tab 2 – Predict + Explain**
 - Upload current student data
 - Generate predictions
 - View individual SHAP explanations and recommendations
-
-**Tab 3 – User Guide**
-- Read usage instructions and interpretation guidance
 """)
 
     with st.expander("5️⃣ Step-by-Step: Training a Model"):
         st.markdown("""
 ### Step 1: Upload Training Data
-Use **📄 Upload Labeled Training Data File**.
-
-The app supports CSV, TXT, and Excel files.
-- For CSV/TXT files, a message such as **Detected delimiter: comma (,)** will appear
-- For Excel files with multiple sheets, select the correct sheet from **Choose Excel sheet**
+Use **Upload Labeled Training Data File** to upload your historical dataset.
 
 ### Step 2: Select the Target Column
 Use **Target Column**.
 
-👉 Choose the column indicating dropout in the **Target Column**.
+Choose the column indicating dropout in the **Target Column**.
 
 ### Step 3: Select Student Identifier Columns
 Use:
 - **Student ID Column**
 - **Student Name Column**
 
-These help identify students in prediction outputs and SHAP explanations.
-
-### Step 4: Calibrate the Test Split
+### Step 4: Adjust the Test Split
 Use **Test Split Proportion**.
 
-This controls how much of the historical data is reserved for testing.
-- Lower values leave more data for training
-- Higher values reserve more data for evaluation
+This controls how the data is divided into:
+- training data
+- testing data
 
-📌 The default value **0.20** is a good starting point for most datasets.
+The default value usually works well, but you can calibrate it depending on dataset size and evaluation needs.
 
-### Step 5: Select the Model
+### Step 5: Choose the Model
 Use **Model Selection**.
 
 Options include:
 - Logistic Regression
-- XGBoost
 - Random Forest
+- XGBoost
 - Neural Network
 - Run all 4 and choose the best
 
-### Step 6: Select the Best-Model Metric (Conditional)
-If you choose **Run all 4 and choose the best**, an additional dropdown appears:
+### Step 6: Select the Metric for Best Model Selection (Conditional)
+This appears only when you select **Run all 4 and choose the best**.
 
-**Metric to Select the Best Model**
-
-This metric is used to choose the best-performing model automatically.
+Use **Metric to Select the Best Model**.
 
 ### Step 7: Train the Model
 Click **🚀 Train Model**.
 
-- The training status message appears above the button
-- Model performance metrics appear on the right
-- If all four models are trained, a comparison table appears
+- A training status message appears above the button
+- The button is disabled during training
 
-### Step 8: Review the Outputs
+### Step 8: Review Results
 After training, review:
-- **Model Performance Metrics**
-- **Model Comparison** (if applicable)
-- **Global SHAP Summary**
+- Model Performance Metrics
+- Model Comparison (if applicable)
+- Global SHAP Summary
 """)
-        st.image("/mnt/data/image.png", caption="Training Setup (Before Training)")
-        st.image("/mnt/data/Tab-1 after model training .png", caption="Training Results and Global SHAP Summary")
+        safe_guide_image("image.png", "Training Setup (Before Training)")
+        safe_guide_image("Tab-1 after model training .png", "Training Results and Global SHAP Summary")
 
     with st.expander("6️⃣ Step-by-Step: Making Predictions"):
         st.markdown("""
-### Step 1: Upload the Prediction File
-Use **📄 Upload new Student Data File to get predictions**.
+### Step 1: Upload Prediction Data
+Use **Upload new Student Data File to get predictions**.
 
-### Step 2: Check File Validation
-The system automatically validates compatibility with the trained model.
+### Step 2: Validate File Compatibility
+The system automatically checks whether the uploaded file is compatible with the trained model.
 
-If the file is valid, you will see a success message.
-If not, you will see **Upload file incompatibility** together with missing or unexpected columns.
+If an incompatibility error appears, correct the file so that its columns exactly match the training file, then re-upload it.
 
-### Step 3: Correct and Re-upload if Needed
-If validation fails:
-- Compare the prediction file columns with the training file columns
-- Remove extra columns
-- Add any missing required columns
-- Re-upload the corrected file
-
-### Step 4: Generate Predictions
+### Step 3: Generate Predictions
 Click **Submit File for Predictions**.
 
-### Step 5: Review Results
-The **Prediction Results** table shows:
+### Step 4: Review Prediction Results
+View:
 - Student ID
 - Student Name
 - Dropout Probability
 - Prediction
 """)
-        st.image("/mnt/data/Tab-2 before file submission .png", caption="Prediction File Upload and Validation")
-        st.image("/mnt/data/Tab-2 after file submission.png", caption="Prediction Results")
+        safe_guide_image("Tab-2 before file submission .png", "Prediction Section Before Submission")
+        safe_guide_image("Tab-2 after file submission.png", "Prediction Results")
 
     with st.expander("7️⃣ SHAP Explanation & Interpretation"):
         st.markdown("""
-### Step 1: Select a Student
-Use **Select Student ID** in the **SHAP Explanation for a Specific Student** section.
+### Step 1: Select the Student
+Use **Select Student ID**.
 
 ### Step 2: Generate the Explanation
 Click **🔎 Explain Prediction**.
 
-### Step 3: Review the Output
-You can review:
-- The status card with prediction and dropout probability
-- **Summary explanation for Student ID ...**
-- **Recommendations for Student ID ...**
-- **Individual SHAP Waterfall Plot**
-
 ### How to Read the Waterfall Plot
-- Bars pushing to the **right** increase dropout risk
-- Bars pushing to the **left** decrease dropout risk
-- **Red** bars indicate increasing risk
-- **Blue** bars indicate reducing risk
-- Larger bars indicate stronger effects
+- Bars pushing to the right increase dropout risk
+- Bars pushing to the left decrease dropout risk
+- Red bars indicate factors increasing dropout risk
+- Blue bars indicate factors reducing dropout risk
+- Larger bars mean a stronger effect
 
-The prediction starts from **E[f(x)]** (baseline) and moves to **f(x)** (final prediction).
+The prediction starts from the baseline **E[f(x)]** and moves step-by-step to the final prediction **f(x)** based on contributing factors.
 """)
-        st.image("/mnt/data/Tab-2 SHAP section before Prediction .png", caption="Before Generating SHAP Explanation")
-        st.image("/mnt/data/Tab-2 SHAP section after Prediction .png", caption="After Generating SHAP Explanation")
+        safe_guide_image("Tab-2 SHAP section before Prediction .png", "SHAP Section Before Explanation")
+        safe_guide_image("Tab-2 SHAP section after Prediction .png", "Individual SHAP Waterfall Plot and Summary")
 
     with st.expander("8️⃣ Common Issues & Fixes"):
         st.markdown("""
-**Prediction file is incompatible**
-- Make sure the prediction file uses exactly the same columns as the training file
+**Prediction file incompatibility**
+- Ensure the uploaded prediction file has exactly the same columns as the training file
 
-**Excel file has multiple sheets**
-- Select the correct sheet using **Choose Excel sheet**
-
-**CSV/TXT file looks wrong after upload**
-- Check the detected delimiter message and confirm the file is correctly delimited
+**Delimiter issues**
+- Ensure the CSV or text file is properly formatted
 
 **Poor model performance**
-- Review feature quality, target quality, and dataset size
+- Improve data quality, feature relevance, and dataset size where possible
 """)
 
     with st.expander("9️⃣ Best Practices"):
         st.markdown("""
-- Use clean, structured historical student data
+- Use clean, structured data
 - Ensure the target column is binary
-- Keep training and prediction files aligned
-- Start with the default **Test Split Proportion = 0.20**
+- Minimize missing values
+- Use **Run all 4 and choose the best** when you want the system to compare models automatically
 - Use SHAP explanations to support intervention decisions
 """)
