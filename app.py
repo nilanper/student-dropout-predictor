@@ -34,6 +34,18 @@ except Exception:
 # ============================================================
 # Page config
 # ============================================================
+
+from pathlib import Path
+BASE_DIR = Path(__file__).parent
+GUIDE_DIR = BASE_DIR / "assets" / "user_guide"
+
+def show_guide_image(filename, caption):
+    image_path = GUIDE_DIR / filename
+    if image_path.exists():
+        st.image(str(image_path), caption=caption, use_container_width=True)
+    else:
+        st.caption(f"Screenshot not available: {caption}")
+
 st.set_page_config(
     page_title="Student Dropout Predictor with SHAP Explainer",
     page_icon="🎓",
@@ -2411,3 +2423,30 @@ If incompatibilities are found, the system will show an error message and identi
 - Use **Run all 4 and choose the best** when you want automated model selection
 - Use SHAP explanations to support intervention planning and decision-making
 """)
+
+
+# ============================================================
+# User Guide Tab
+# ============================================================
+with tab3:
+    st.header("📘 User Guide")
+
+    with st.expander("5️⃣ Step-by-Step: Training a Model", expanded=True):
+        st.markdown("### Step 1: Upload Training Data")
+        show_guide_image("Tab1_before_training.png","Training Setup (Before Training)")
+        st.markdown("### Step 2: Select Target Column")
+        st.markdown("Choose the column indicating dropout in the 'Target Column'")
+        st.markdown("### Step 8: View Results")
+        show_guide_image("Tab1_after_model_training.png","Training Results")
+
+    with st.expander("6️⃣ Step-by-Step: Making Predictions"):
+        st.markdown("### Step 1: Upload Prediction File")
+        show_guide_image("Tab2_before_file_submission.png","Before Prediction")
+        st.markdown("### Step 3: Generate Predictions")
+        st.markdown("### Step 4: View Results")
+        show_guide_image("Tab2_after_file_submission.png","Prediction Results")
+
+    with st.expander("7️⃣ SHAP Explanation"):
+        show_guide_image("Tab2_SHAPsection_before_Prediction.png","Before SHAP")
+        st.markdown("### Step 2: Generate Explanation")
+        show_guide_image("Tab2_SHAPsection_after_Prediction.png","After SHAP")
