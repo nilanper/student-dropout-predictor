@@ -1757,6 +1757,7 @@ with train_tab:
             key="training_file_uploader",
             on_change=on_training_file_change,
         )
+        training_status_placeholder = st.empty()
 
         target_column = None
         student_id_column = None
@@ -1849,7 +1850,6 @@ with train_tab:
                     selection_metric = "F1 Score"
 
                 train_button = st.button("🚀 Train Model", use_container_width=True)
-                training_status_placeholder = st.empty()
 
                 if train_button:
                     st.session_state.train_metrics = None
