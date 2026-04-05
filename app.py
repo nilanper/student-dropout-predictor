@@ -1126,11 +1126,11 @@ This chart shows **importance only**, not direction.
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
-- Red dots usually indicate **higher feature values**
-- Blue dots usually indicate **lower feature values**
+- 🔴 Red dots usually indicate **higher feature values**
+- 🔵 Blue dots usually indicate **lower feature values**
 
-Dots to the **right** tend to increase dropout risk.  
-Dots to the **left** tend to decrease dropout risk.
+Dots to the right ➡️ tend to increase dropout risk.  
+Dots to the left ⬅️ tend to decrease dropout risk.
 """,
                 )
                 if st.session_state.global_summary_plot_bytes is not None:
@@ -1338,8 +1338,10 @@ with predict_tab:
                 """
 This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
-- Bars pushing to the **right** increase dropout risk
-- Bars pushing to the **left** decrease dropout risk
+- Bars pushing to the right ➡️ increase dropout risk
+- Bars pushing to the left ⬅️ decrease dropout risk
+- 🔴 Red bars indicate factors increasing dropout risk
+- 🔵 Blue bars indicate factors reducing dropout risk
 - Larger bars mean a **stronger effect**
 - The final prediction is based on the combined effect of all displayed factors
 """,
