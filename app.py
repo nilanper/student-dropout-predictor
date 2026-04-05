@@ -1843,7 +1843,7 @@ with train_tab:
 
                 if model_choice == "Run all 4 and choose the best":
                     selection_metric = st.selectbox(
-                        "Best Model Selection Metric",
+                        "Metric to Select the Best Model",
                         ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
                         index=0,
                     )
