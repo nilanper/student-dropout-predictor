@@ -71,6 +71,7 @@ def init_state():
         "global_shap_summary_text": "",
         "shap_variance_low": False,
         "shap_variance_warning": "",
+        "is_training": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -524,6 +525,7 @@ def reset_training_state():
     st.session_state.global_shap_summary_text = ""
     st.session_state.shap_variance_low = False
     st.session_state.shap_variance_warning = ""
+    st.session_state.is_training = False
     reset_prediction_state()
 
 
@@ -1757,7 +1759,6 @@ with train_tab:
             key="training_file_uploader",
             on_change=on_training_file_change,
         )
-        training_status_placeholder = st.empty()
 
         target_column = None
         student_id_column = None
@@ -1849,9 +1850,15 @@ with train_tab:
                 else:
                     selection_metric = "F1 Score"
 
-                train_button = st.button("🚀 Train Model", use_container_width=True)
+                training_status_placeholder = st.empty()
+                train_button = st.button(
+                    "🚀 Train Model",
+                    use_container_width=True,
+                    disabled=st.session_state.is_training,
+                )
 
                 if train_button:
+                    st.session_state.is_training = True
                     st.session_state.train_metrics = None
                     st.session_state.global_importance_plot_bytes = None
                     st.session_state.global_summary_plot_bytes = None
@@ -1873,6 +1880,7 @@ with train_tab:
                     except Exception as e:
                         st.error(f"Model training failed: {e}")
                     finally:
+                        st.session_state.is_training = False
                         training_status_placeholder.empty()
 
             except Exception as e:
