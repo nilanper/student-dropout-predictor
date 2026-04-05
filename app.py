@@ -948,7 +948,7 @@ def explain_student(chosen_id: str):
 # ============================================================
 st.title("🎓 Student Dropout Predictor with SHAP Explainer")
 st.write(
-    "Upload a CSV file containing student records to train an institution-specific model, "
+    "Upload a Data file containing student records to train an institution-specific model, "
     "then generate dropout predictions and SHAP-based explanations."
 )
 
@@ -999,7 +999,7 @@ with train_tab:
                 if training_df_preview.shape[1] == 1:
                     raise ValueError(
                         "❌ The uploaded file could not be properly processed. "
-                        "Please check that it is a valid CSV file with multiple columns."
+                        "Please check that it is a valid data file with multiple columns."
                     )
 
                 training_df_preview.columns = training_df_preview.columns.str.strip()
@@ -1038,12 +1038,13 @@ with train_tab:
                 model_choice = st.selectbox(
                     "Model Selection",
                     [
-                        "XGBoost",
-                        "Random Forest",
                         "Logistic Regression",
+                        "Random Forest",
+                        "XGBoost",
                         "Neural Network",
                         "Run all 4 and choose the best",
                     ],
+                    index=0,
                 )
 
                 selection_metric = st.selectbox(
@@ -1193,7 +1194,7 @@ with predict_tab:
                     if prediction_df_preview.shape[1] == 1:
                         raise ValueError(
                             "❌ The uploaded file could not be properly processed. "
-                            "Please check that it is a valid CSV file with multiple columns."
+                            "Please check that it is a valid data file with multiple columns."
                         )
 
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
