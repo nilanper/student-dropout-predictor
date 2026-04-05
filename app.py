@@ -1,9 +1,8 @@
 import io
+import csv
 import os
-import re
 import tempfile
 import warnings
-from math import prod
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -16,11 +15,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.utils.class_weight import compute_sample_weight
 
 warnings.filterwarnings("ignore")
 
@@ -67,9 +65,6 @@ def init_state():
         "selected_model_name": None,
         "model_comparison_df": None,
         "selection_metric": "F1 Score",
-        "global_shap_summary_text": "",
-        "shap_variance_low": False,
-        "shap_variance_warning": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -79,282 +74,62 @@ def init_state():
 init_state()
 
 
-st.markdown(
-    """
-    <div class="app-hero">
-        <h1>🎓 Student Dropout Predictor with SHAP Explainer</h1>
-        <p>
-            A dashboard for training machine learning models, predicting dropout risk, and explaining results through intuitive SHAP-based insights.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-    <div class="app-intro">
-        Upload a CSV file containing student records to train an institution-specific model, then generate dropout predictions and SHAP-based explanations.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-
 # ============================================================
 # Styling
 # ============================================================
 st.markdown(
     """
+    <style>
+    .shap-plot-frame {
+        border: 1px solid rgba(49, 51, 63, 0.2);
+        border-radius: 0.75rem;
+        padding: 0.5rem;
+        background: white;
+    }
 
-    
-<style>
-:root {
-    --app-bg: #f6f4fb;
-    --surface: #ffffff;
-    --text-main: #1f1830;
-    --text-muted: #5f5576;
-    --border-soft: #ddd6f0;
-    --primary: #5b3cc4;
-    --primary-2: #7a5af8;
-    --shadow-card: 0 6px 18px rgba(63, 34, 124, 0.06);
-}
+    .training-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem 1rem;
+        border-radius: 0.75rem;
+        background: #e0f2fe;
+        color: #075985;
+        border: 1px solid #bae6fd;
+        font-weight: 600;
+        margin-top: 0.6rem;
+        margin-bottom: 0.75rem;
+    }
 
-.stApp {
-    background:
-        radial-gradient(circle at top right, rgba(128, 90, 213, 0.08), transparent 28%),
-        radial-gradient(circle at top left, rgba(99, 102, 241, 0.08), transparent 24%),
-        var(--app-bg);
-    color: var(--text-main);
-}
+    .training-spinner {
+        width: 18px;
+        height: 18px;
+        border: 3px solid #7dd3fc;
+        border-top: 3px solid #0284c7;
+        border-radius: 50%;
+        animation: training-spin 0.9s linear infinite;
+        flex-shrink: 0;
+    }
 
-.block-container {
-    padding-top: 1.05rem !important;
-    padding-bottom: 1.5rem !important;
-    max-width: none !important;
-    padding-left: 3rem !important;
-    padding-right: 3rem !important;
-}
+    @keyframes training-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 
-.app-hero {
-    background: linear-gradient(135deg, #4b2bbd 0%, #6d4de0 52%, #8b6cf0 100%);
-    border-radius: 22px;
-    padding: 1.8rem 1.35rem 1.05rem 1.35rem;
-    color: white;
-    box-shadow: 0 14px 34px rgba(91, 60, 196, 0.22);
-    margin-bottom: 0.55rem;
-    border: 1px solid rgba(255,255,255,0.16);
-}
-
-.app-hero h1 {
-    margin: 0;
-    font-size: 1.95rem;
-    line-height: 1.15;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: white !important;
-}
-
-.app-hero p {
-    margin: 0.42rem 0 0 0;
-    font-size: 0.98rem;
-    opacity: 0.96;
-    line-height: 1.45;
-    color: white !important;
-}
-
-.app-intro {
-    margin: 0.1rem 0 0.9rem 1rem;
-    font-size: 1rem;
-    color: var(--text-muted);
-    line-height: 1.45;
-}
-
-.shap-plot-frame {
-    border: 1px solid var(--border-soft);
-    border-radius: 18px;
-    padding: 0.55rem;
-    background: var(--surface);
-    box-shadow: var(--shadow-card);
-}
-
-.training-banner {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.95rem 1rem;
-    border-radius: 16px;
-    background: linear-gradient(135deg, #eef3ff 0%, #f7f2ff 100%);
-    color: #43307a;
-    border: 1px solid #d8cdf7;
-    font-weight: 600;
-    margin-top: 0.5rem;
-    margin-bottom: 0.8rem;
-    box-shadow: var(--shadow-card);
-}
-
-.training-spinner {
-    width: 18px;
-    height: 18px;
-    border: 3px solid #d7cbff;
-    border-top: 3px solid #6d4de0;
-    border-radius: 50%;
-    animation: training-spin 0.9s linear infinite;
-    flex-shrink: 0;
-}
-
-@keyframes training-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-h1, h2, h3, h4, h5, h6 {
-    color: var(--text-main);
-    letter-spacing: -0.02em;
-}
-
-[data-testid="stTabs"] button {
-    border-radius: 14px 14px 0 0 !important;
-    padding: 0.8rem 1rem !important;
-    font-weight: 700 !important;
-}
-
-[data-testid="stTabs"] [aria-selected="true"] {
-    color: var(--primary) !important;
-    border-bottom-color: var(--primary) !important;
-}
-
-[data-testid="stFileUploader"] section,
-[data-testid="stSelectbox"] > div,
-[data-testid="stNumberInput"] > div,
-[data-testid="stTextInput"] > div,
-[data-baseweb="select"] > div {
-    background: #ffffff !important;
-    border-radius: 14px !important;
-    border: 1px solid #d8cdf7 !important;
-    box-shadow: 0 4px 10px rgba(91, 60, 196, 0.05) !important;
-}
-
-[data-baseweb="select"] input {
-    color: var(--text-main) !important;
-}
-
-[data-baseweb="select"] > div:hover,
-[data-testid="stTextInput"] > div:hover,
-[data-testid="stNumberInput"] > div:hover {
-    border-color: #b8a8f1 !important;
-}
-
-[data-baseweb="select"] > div:focus-within,
-[data-testid="stTextInput"] > div:focus-within,
-[data-testid="stNumberInput"] > div:focus-within {
-    border-color: var(--primary) !important;
-    box-shadow: 0 0 0 3px rgba(91, 60, 196, 0.10) !important;
-}
-
-button[kind="secondary"],
-button[kind="primary"] {
-    white-space: nowrap !important;
-    width: auto !important;
-    padding-left: 14px !important;
-    padding-right: 14px !important;
-    border-radius: 12px !important;
-    border: 1px solid #d8cdf7 !important;
-    box-shadow: var(--shadow-card) !important;
-    font-weight: 700 !important;
-}
-
-button[kind="primary"] {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 100%) !important;
-    color: white !important;
-    border-color: var(--primary) !important;
-}
-
-button[kind="secondary"] {
-    background: white !important;
-    color: #4b2bbd !important;
-}
-
-div[data-testid="stPopover"] {
-    display: flex !important;
-    justify-content: flex-end !important;
-}
-
-div[data-testid="stPopover"] button {
-    border-radius: 10px !important;
-    width: auto !important;
-    max-width: 210px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    cursor: pointer !important;
-    pointer-events: auto !important;
-    overflow: hidden !important;
-}
-
-div[data-testid="stPopover"] * {
-    pointer-events: auto !important;
-}
-
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--border-soft);
-    border-radius: 14px;
-    overflow: hidden;
-    box-shadow: var(--shadow-card);
-    background: var(--surface);
-}
-
-[data-testid="stMetric"] {
-    background: var(--surface);
-    border: 1px solid var(--border-soft);
-    border-radius: 16px;
-    padding: 0.35rem 0.6rem;
-    box-shadow: var(--shadow-card);
-}
-
-[data-testid="stAlert"] {
-    border-radius: 14px !important;
-    box-shadow: var(--shadow-card);
-}
-
-.stDownloadButton button {
-    background: linear-gradient(135deg, #ffffff 0%, #f4efff 100%) !important;
-    color: #4b2bbd !important;
-    border-color: #d8cdf7 !important;
-}
-
-[data-testid="stFileUploaderDropzone"] {
-    min-height: 56px !important;
-    padding-top: 0.2rem !important;
-    padding-bottom: 0.2rem !important;
-}
-
-[data-testid="stFileUploaderDropzone"] > div {
-    padding-top: 0.05rem !important;
-    padding-bottom: 0.05rem !important;
-    gap: 0.2rem !important;
-}
-
-[data-testid="stFileUploaderFile"] {
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    min-height: 34px !important;
-}
-
-[data-testid="stFileUploaderDeleteBtn"] {
-    margin-top: 0 !important;
-}
-</style>
-
-
+    button[kind="secondary"] {
+        white-space: nowrap !important;
+        width: auto !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+    </style>
     """,
     unsafe_allow_html=True,
 )
 
-import csv
 
 
-def read_csv_flexible(file):
+def _get_file_bytes(file):
     raw = file.getvalue() if hasattr(file, "getvalue") else file.read()
     if hasattr(file, "seek"):
         file.seek(0)
@@ -363,9 +138,13 @@ def read_csv_flexible(file):
         raise ValueError("Uploaded file could not be read.")
 
     if isinstance(raw, str):
-        raw_bytes = raw.encode("utf-8")
-    else:
-        raw_bytes = raw
+        return raw.encode("utf-8")
+
+    return raw
+
+
+def detect_csv_delimiter(file):
+    raw_bytes = _get_file_bytes(file)
 
     try:
         sample_text = raw_bytes[:8192].decode("utf-8-sig")
@@ -387,33 +166,78 @@ def read_csv_flexible(file):
         if delimiter_counts[detected_sep] == 0:
             detected_sep = ","
 
+    return detected_sep
+
+
+def format_delimiter_display(delimiter):
+    display_map = {
+        ",": "comma (,)",
+        ";": "semicolon (;)",
+        "\t": "tab (\t)",
+        "|": "pipe (|)",
+    }
+    return display_map.get(delimiter, delimiter)
+
+
+def read_csv_flexible(file):
+    raw_bytes = _get_file_bytes(file)
+    detected_sep = detect_csv_delimiter(file)
+
     for encoding in ["utf-8-sig", "utf-8", "latin1"]:
         try:
-            return pd.read_csv(io.BytesIO(raw_bytes), sep=detected_sep, encoding=encoding)
+            df = pd.read_csv(io.BytesIO(raw_bytes), sep=detected_sep, encoding=encoding)
+            return df, detected_sep
         except Exception:
             continue
 
     raise ValueError("The uploaded file could not be properly processed.")
 
 
+def get_excel_sheet_names(file):
+    try:
+        if hasattr(file, "seek"):
+            file.seek(0)
+        excel_file = pd.ExcelFile(file)
+        sheet_names = excel_file.sheet_names
+        if hasattr(file, "seek"):
+            file.seek(0)
+        return sheet_names
+    except ImportError:
+        raise ValueError("Excel support is not available. Please upload a CSV file.")
+    except Exception as e:
+        raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
-def read_uploaded_table(file):
+
+def read_uploaded_table(file, sheet_name=None):
     file_name = getattr(file, "name", "").lower()
 
-    if file_name.endswith(".csv"):
-        return read_csv_flexible(file)
+    if file_name.endswith(".csv") or file_name.endswith(".txt"):
+        df, detected_sep = read_csv_flexible(file)
+        return df, f"Detected delimiter: {format_delimiter_display(detected_sep)}"
 
     if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
         try:
             if hasattr(file, "seek"):
                 file.seek(0)
-            return pd.read_excel(file)
+            selected_sheet = sheet_name if sheet_name is not None else 0
+            df = pd.read_excel(file, sheet_name=selected_sheet)
+            if hasattr(file, "seek"):
+                file.seek(0)
+
+            if sheet_name is None:
+                sheet_names = get_excel_sheet_names(file)
+                selected_sheet_label = sheet_names[0] if sheet_names else "Sheet1"
+            else:
+                selected_sheet_label = sheet_name
+
+            return df, f"Selected sheet: {selected_sheet_label}"
         except ImportError:
             raise ValueError("Excel support is not available. Please upload a CSV file.")
         except Exception as e:
             raise ValueError(f"The uploaded Excel file could not be properly processed: {e}")
 
-    raise ValueError("Unsupported file format. Please upload a CSV or Excel file.")
+    raise ValueError("Unsupported file format. Please upload a CSV, TXT, or Excel file.")
+
 
 # ============================================================
 # Utility functions
@@ -444,9 +268,6 @@ def reset_training_state():
     st.session_state.train_success_message = ""
     st.session_state.selected_model_name = None
     st.session_state.model_comparison_df = None
-    st.session_state.global_shap_summary_text = ""
-    st.session_state.shap_variance_low = False
-    st.session_state.shap_variance_warning = ""
     reset_prediction_state()
 
 
@@ -486,17 +307,6 @@ def render_training_status(placeholder, message: str):
         unsafe_allow_html=True,
     )
 
-
-
-
-def is_low_variance_prediction_array(pred_probs: np.ndarray, threshold: float = 1e-4) -> bool:
-    try:
-        arr = np.asarray(pred_probs, dtype=float)
-        if arr.size == 0:
-            return True
-        return float(np.nanstd(arr)) < float(threshold)
-    except Exception:
-        return False
 
 
 def normalize_binary_target(series: pd.Series) -> pd.Series:
@@ -661,27 +471,12 @@ def save_prediction_results(df: pd.DataFrame) -> str:
 
 def clean_feature_names(feature_names: List[str]) -> List[str]:
     cleaned = []
-
     for name in feature_names:
-        name = str(name)
-
-        name = name.replace("num__", "").replace("cat__", "")
-
-        if "_" in name:
-            parts = name.split("_")
-            if len(parts) >= 2:
-                base = parts[0]
-                category = " ".join(parts[1:])
-                label = f"{base} ({category})"
-            else:
-                label = name
-        else:
-            label = name
-
-        label = label.replace("_", " ").strip()
+        label = str(name).replace("num__", "").replace("cat__", "").replace("_", " ")
         cleaned.append(label[:70])
-
     return cleaned
+
+
 
 def compute_metrics(y_true, y_pred, y_prob):
     return {
@@ -693,54 +488,8 @@ def compute_metrics(y_true, y_pred, y_prob):
     }
 
 
-MODEL_RANDOM_SEARCH_ITERATIONS = {
-    "Logistic Regression": 6,
-    "Random Forest": 8,
-    "XGBoost": 8,
-    "Neural Network": 6,
-}
 
-
-def get_scoring_name(metric_name: str) -> str:
-    metric_map = {
-        "Accuracy": "accuracy",
-        "Precision": "precision",
-        "Recall": "recall",
-        "F1 Score": "f1",
-        "ROC AUC": "roc_auc",
-    }
-    return metric_map.get(metric_name, "f1")
-
-
-
-def get_cv_splitter(y: pd.Series):
-    class_counts = pd.Series(y).value_counts()
-    if class_counts.empty:
-        return None
-
-    min_class_count = int(class_counts.min())
-    if min_class_count < 2:
-        return None
-
-    n_splits = min(3, min_class_count)
-    if n_splits < 2:
-        return None
-
-    return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-
-
-
-def get_xgb_scale_pos_weight(y_train) -> float:
-    y_series = pd.Series(y_train)
-    positives = int((y_series == 1).sum())
-    negatives = int((y_series == 0).sum())
-    if positives <= 0 or negatives <= 0:
-        return 1.0
-    return max(float(negatives) / float(positives), 1.0)
-
-
-
-def get_model_by_name(model_name: str, y_train=None):
+def get_model_by_name(model_name: str):
     if model_name == "XGBoost":
         if XGBClassifier is None:
             raise RuntimeError("xgboost is not installed. Please add xgboost to requirements.txt.")
@@ -753,7 +502,6 @@ def get_model_by_name(model_name: str, y_train=None):
             objective="binary:logistic",
             eval_metric="logloss",
             random_state=42,
-            scale_pos_weight=get_xgb_scale_pos_weight(y_train) if y_train is not None else 1.0,
         )
 
     if model_name == "Random Forest":
@@ -762,17 +510,12 @@ def get_model_by_name(model_name: str, y_train=None):
             max_depth=10,
             min_samples_split=5,
             min_samples_leaf=2,
-            class_weight="balanced",
             random_state=42,
             n_jobs=-1,
         )
 
     if model_name == "Logistic Regression":
-        return LogisticRegression(
-            max_iter=1000,
-            class_weight="balanced",
-            random_state=42,
-        )
+        return LogisticRegression(max_iter=1000, random_state=42)
 
     if model_name == "Neural Network":
         return MLPClassifier(
@@ -782,9 +525,6 @@ def get_model_by_name(model_name: str, y_train=None):
             alpha=0.0001,
             learning_rate_init=0.001,
             max_iter=500,
-            early_stopping=True,
-            validation_fraction=0.15,
-            n_iter_no_change=15,
             random_state=42,
         )
 
@@ -792,126 +532,14 @@ def get_model_by_name(model_name: str, y_train=None):
 
 
 
-def get_param_distributions(model_name: str):
-    if model_name == "Logistic Regression":
-        return {
-            "C": [0.01, 0.1, 1.0, 5.0, 10.0],
-            "solver": ["lbfgs", "liblinear"],
-        }
-
-    if model_name == "Random Forest":
-        return {
-            "n_estimators": [200, 300, 400],
-            "max_depth": [8, 10, 14, None],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
-            "max_features": ["sqrt", "log2", None],
-        }
-
-    if model_name == "XGBoost":
-        return {
-            "n_estimators": [150, 250, 350],
-            "max_depth": [3, 5, 7],
-            "learning_rate": [0.03, 0.05, 0.1],
-            "subsample": [0.8, 0.9, 1.0],
-            "colsample_bytree": [0.8, 0.9, 1.0],
-            "min_child_weight": [1, 3, 5],
-        }
-
-    if model_name == "Neural Network":
-        return {
-            "hidden_layer_sizes": [(64, 32), (128, 64), (64, 32, 16)],
-            "alpha": [0.0001, 0.001, 0.01],
-            "learning_rate_init": [0.0005, 0.001, 0.005],
-            "batch_size": [32, 64, 128],
-        }
-
-    raise ValueError(f"Unsupported model name: {model_name}")
-
-
-
-def get_fit_kwargs(model_name: str, y_train):
-    # sklearn MLPClassifier in this deployment does not accept sample_weight in fit().
-    # Keep fit kwargs empty to avoid RandomizedSearchCV failures when evaluating all models.
-    return {}
-
-
-
-def tune_model_hyperparameters(model_name, X_train_t, y_train, selection_metric: str):
-    base_model = get_model_by_name(model_name, y_train=y_train)
-    param_distributions = get_param_distributions(model_name)
-    cv_splitter = get_cv_splitter(y_train)
-
-    if cv_splitter is None:
-        return base_model, {}, np.nan
-
-    total_combinations = prod(len(v) for v in param_distributions.values())
-    n_iter = min(MODEL_RANDOM_SEARCH_ITERATIONS.get(model_name, 6), total_combinations)
-
-    search = RandomizedSearchCV(
-        estimator=base_model,
-        param_distributions=param_distributions,
-        n_iter=n_iter,
-        scoring=get_scoring_name(selection_metric),
-        cv=cv_splitter,
-        random_state=42,
-        n_jobs=-1,
-        refit=True,
-    )
-    fit_kwargs = get_fit_kwargs(model_name, y_train)
-    search.fit(X_train_t, y_train, **fit_kwargs)
-
-    return search.best_estimator_, search.best_params_, float(search.best_score_)
-
-
-
-def fit_model_with_optional_early_stopping(model_name, model, X_train_t, y_train):
-    fit_kwargs = get_fit_kwargs(model_name, y_train)
-
-    if model_name == "XGBoost":
-        stratify_y = y_train if len(np.unique(y_train)) == 2 else None
-        X_fit, X_val, y_fit, y_val = train_test_split(
-            X_train_t,
-            y_train,
-            test_size=0.15,
-            random_state=42,
-            stratify=stratify_y,
-        )
-
-        model.set_params(early_stopping_rounds=20)
-        model.fit(X_fit, y_fit, eval_set=[(X_val, y_val)], verbose=False)
-
-        best_iteration = getattr(model, "best_iteration", None)
-        if best_iteration is not None:
-            final_n_estimators = max(int(best_iteration) + 1, 25)
-            final_model = get_model_by_name(model_name, y_train=y_train)
-            final_params = model.get_params()
-            final_params.pop("early_stopping_rounds", None)
-            final_model.set_params(**{k: v for k, v in final_params.items() if k in final_model.get_params()})
-            final_model.set_params(n_estimators=final_n_estimators)
-            final_model.fit(X_train_t, y_train, verbose=False)
-            return final_model
-
-        return model
-
-    model.fit(X_train_t, y_train, **fit_kwargs)
-    return model
-
-
-
-def train_single_model(model_name, X_train_t, X_test_t, y_train, y_test, selection_metric):
-    tuned_model, best_params, cv_best_score = tune_model_hyperparameters(
-        model_name,
-        X_train_t,
-        y_train,
-        selection_metric,
-    )
-    model = fit_model_with_optional_early_stopping(model_name, tuned_model, X_train_t, y_train)
+def train_single_model(model_name, X_train_t, X_test_t, y_train, y_test):
+    model = get_model_by_name(model_name)
+    model.fit(X_train_t, y_train)
 
     y_prob = model.predict_proba(X_test_t)[:, 1]
     y_pred = (y_prob >= 0.5).astype(int)
     metrics = compute_metrics(y_test, y_pred, y_prob)
-    return model, metrics, best_params, cv_best_score
+    return model, metrics
 
 
 
@@ -1009,7 +637,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
         shap_values = np.array(shap_values_obj)
 
     plt.close("all")
-    plt.figure(figsize=(12.0, 8.2))
+    plt.figure(figsize=(11, 7))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -1023,7 +651,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
     plt.close(fig_bar)
 
     plt.close("all")
-    plt.figure(figsize=(12.0, 8.2))
+    plt.figure(figsize=(11, 7))
     shap.summary_plot(
         shap_values,
         X_sample,
@@ -1048,7 +676,7 @@ def build_shap_figure(explanation, max_display: int = 10):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(11.5, 8.2 + max_len * 0.075), 15.5)
+    fig_width = min(max(13, 9 + max_len * 0.08), 18)
     fig_height = min(max(6.5, 0.55 * max_display + 2.2), 10)
     fig.set_size_inches(fig_width, fig_height)
 
@@ -1086,328 +714,21 @@ def get_student_id_choices_from_predictions() -> List[str]:
 
 
 def render_centered_chart_help(title: str, help_text: str, heading_level: int = 0):
-    title_col, help_col = st.columns([4.8, 2.0])
-    with title_col:
+    left_col, center_col, right_col = st.columns([3, 2, 1])
+    with left_col:
         if heading_level == 3:
             st.markdown(f"### {title}")
         else:
             st.markdown(f"**{title}**")
-    with help_col:
+    with center_col:
+        st.write("")
         st.write("")
         with st.popover("ℹ️ How to read this chart"):
             st.markdown(help_text)
+    with right_col:
+        st.write("")
 
 
-def generate_plain_language_shap_summary(explanation, prediction_label, prediction_prob, top_n=3):
-    feature_names = explanation.feature_names
-    shap_values = explanation.values
-
-    items = list(zip(feature_names, shap_values))
-    items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
-
-    risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
-    risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
-
-    def clean_name(name):
-        name = str(name)
-
-        if "_" in name:
-            parts = name.split("_")
-            if len(parts) >= 2:
-                base = parts[0]
-                category = " ".join(parts[1:])
-                return f"{base} ({category})"
-
-        return name.replace("_", " ").strip()
-
-    increasing_text = ", ".join(clean_name(name) for name, _ in risk_increasing) if risk_increasing else "no major factors"
-    reducing_text = ", ".join(clean_name(name) for name, _ in risk_reducing) if risk_reducing else "no major factors"
-
-    summary_html = f"""
-    This student was predicted as <b>{prediction_label}</b> with a dropout probability of <b>{prediction_prob}</b>.<br><br>
-    <b>Factors increasing dropout risk:</b> {increasing_text}<br><br>
-    <b>Factors reducing dropout risk:</b> {reducing_text}<br><br>
-    """
-
-    if str(prediction_label).lower() == "dropout":
-        summary_html += "Overall, the factors increasing dropout risk were stronger than the factors reducing risk which resulted in a <b>Dropout</b> prediction."
-    else:
-        summary_html += "Overall, the factors reducing dropout risk were stronger than the factors increasing risk which resulted in a <b>No Dropout</b> prediction."
-
-    return summary_html
-
-
-def generate_shap_recommendations(explanation, prediction_label, prediction_prob_value, raw_row, top_n=3):
-    feature_names = explanation.feature_names
-    shap_values = explanation.values
-
-    items = list(zip(feature_names, shap_values))
-    items_sorted = sorted(items, key=lambda x: abs(x[1]), reverse=True)
-
-    risk_increasing = [(name, val) for name, val in items_sorted if val > 0][:top_n]
-    risk_reducing = [(name, val) for name, val in items_sorted if val < 0][:top_n]
-
-    def clean_name(name):
-        name = str(name).replace("num__", "").replace("cat__", "").strip()
-        if "_" in name:
-            parts = name.split("_")
-            if len(parts) >= 2:
-                base = parts[0].replace("_", " ").strip()
-                category = " ".join(parts[1:]).replace("_", " ").strip()
-                return f"{base} ({category})"
-        return name.replace("_", " ").strip()
-
-    def format_raw_value(value):
-        if pd.isna(value):
-            return "Missing"
-        if isinstance(value, (np.integer, int)):
-            return str(int(value))
-        if isinstance(value, (np.floating, float)):
-            value = float(value)
-            if value.is_integer():
-                return str(int(value))
-            return f"{value:.2f}".rstrip("0").rstrip(".")
-        return str(value).strip()
-
-    def get_display_label(name):
-        cleaned = clean_name(name)
-
-        if hasattr(raw_row, "index"):
-            lookup = {str(col).strip().lower(): col for col in raw_row.index}
-            key = cleaned.strip().lower()
-
-            # First try an exact raw-column match, even if the column name contains parentheses.
-            if key in lookup:
-                raw_value = raw_row[lookup[key]]
-                return f"<b>{cleaned} - {format_raw_value(raw_value)}</b>"
-
-            # For one-hot style features like "Gender (Female)", prefer the actual raw category
-            # from the base column, e.g. "Gender - Male".
-            if "(" in cleaned and cleaned.endswith(")"):
-                base = cleaned[:cleaned.rfind("(")].strip()
-                base_key = base.strip().lower()
-                if base_key in lookup:
-                    raw_value = raw_row[lookup[base_key]]
-                    return f"<b>{base} - {format_raw_value(raw_value)}</b>"
-
-        # Only if no raw-column/base-column match exists, fall back to the encoded category text.
-        if "(" in cleaned and cleaned.endswith(")"):
-            base = cleaned[:cleaned.rfind("(")].strip()
-            category = cleaned[cleaned.rfind("(") + 1:-1].strip()
-            return f"<b>{base} - {category}</b>"
-
-        return f"<b>{cleaned}</b>"
-
-    def get_plain_display_label(name):
-        label_html = get_display_label(name)
-        return re.sub(r"</?b>", "", label_html)
-
-    def format_feature_list(names):
-        cleaned = [clean_name(name) for name in names if str(name).strip()]
-        if not cleaned:
-            return "no major factors"
-        if len(cleaned) == 1:
-            return cleaned[0]
-        if len(cleaned) == 2:
-            return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
-
-    recommendations = []
-
-    try:
-        prob = float(prediction_prob_value)
-    except Exception:
-        prob = np.nan
-
-    if pd.notna(prob) and prob >= 0.50:
-        top_feature_names = [name for name, _ in risk_increasing]
-        top_features_text = format_feature_list(top_feature_names)
-
-        recommendations.append(
-            f"The main factors contributing to this student’s dropout risk are {top_features_text}."
-        )
-
-        for name, _ in risk_increasing:
-            feature_label = get_display_label(name)
-            recommendations.append(
-                f"{feature_label} is one of the factors contributing to this student’s dropout risk."
-            )
-
-    elif pd.notna(prob) and 0.25 <= prob < 0.50:
-        top_feature_names = [name for name, _ in risk_increasing]
-        top_features_text = format_feature_list(top_feature_names)
-
-        recommendations.append(
-            f"The main factors influencing this student’s prediction are {top_features_text}."
-        )
-
-        for name, _ in risk_increasing:
-            feature_label = get_display_label(name)
-            recommendations.append(
-                f"{feature_label} is one of the factors influencing this student’s predicted outcome."
-            )
-
-    else:
-        top_feature_names = [name for name, _ in risk_reducing]
-        top_features_text = format_feature_list(top_feature_names)
-
-        recommendations.append(
-            f"The main factors supporting this student’s predicted outcome are {top_features_text}."
-        )
-
-        for name, _ in risk_reducing:
-            feature_label = get_display_label(name)
-            recommendations.append(
-                f"{feature_label} is one of the factors contributing positively to this student’s predicted outcome."
-            )
-
-    if not recommendations:
-        recommendations.append(
-            "No strong contributing factors were identified among the top SHAP features for this prediction."
-        )
-
-    unique_recommendations = []
-    seen = set()
-    for rec in recommendations:
-        if rec not in seen:
-            unique_recommendations.append(rec)
-            seen.add(rec)
-
-    return unique_recommendations
-
-
-def render_summary_box(student_id: str, summary_html: str):
-    st.markdown(
-        f"""
-        <div style="
-            padding: 0.9rem 1rem;
-            border-radius: 0.6rem;
-            background: #eff6ff;
-            color: #1e3a8a;
-            border: 1px solid #bfdbfe;
-            margin-top: 0.75rem;
-            margin-bottom: 0.75rem;
-        ">
-            <div style="font-weight: 700; margin-bottom: 0.45rem;">
-                Summary explanation for Student ID {student_id}
-            </div>
-            <div style="line-height: 1.6;">
-                {summary_html}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_recommendation_box(student_id: str, recommendations):
-    rec_html = "".join([f"<li>{rec}</li>" for rec in recommendations])
-
-    st.markdown(
-        f"""
-        <div style="
-            padding: 0.9rem 1rem;
-            border-radius: 0.6rem;
-            background: #fffbeb;
-            color: #92400e;
-            border: 1px solid #fde68a;
-            margin-top: 0.75rem;
-            margin-bottom: 0.75rem;
-        ">
-            <div style="font-weight: 700; margin-bottom: 0.45rem;">
-                Recommendations for Student ID {student_id}
-            </div>
-            <ul style="margin-top: 0.35rem; padding-left: 1.2rem; line-height: 1.6;">
-                {rec_html}
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def generate_global_shap_summary(feature_names: List[str], shap_values: np.ndarray, top_n: int = 5):
-    mean_abs = np.mean(np.abs(shap_values), axis=0)
-    mean_signed = np.mean(shap_values, axis=0)
-
-    feature_importance = list(zip(feature_names, mean_abs, mean_signed))
-    feature_importance.sort(key=lambda x: x[1], reverse=True)
-
-    top_features = feature_importance[:top_n]
-    increasing = [name for name, _, signed in feature_importance if signed > 0][:top_n]
-    reducing = [name for name, _, signed in feature_importance if signed < 0][:top_n]
-
-    def clean_name(name):
-        name = str(name).replace("num__", "").replace("cat__", "")
-
-        if "_" in name:
-            parts = name.split("_")
-            if len(parts) >= 2:
-                base = parts[0]
-                category = " ".join(parts[1:])
-                return f"{base} ({category})"
-
-        return name.replace("_", " ").strip()
-
-    def format_feature_list(names):
-        cleaned = [clean_name(name) for name in names if str(name).strip()]
-        if not cleaned:
-            return "no major factors"
-        if len(cleaned) == 1:
-            return cleaned[0]
-        if len(cleaned) == 2:
-            return f"{cleaned[0]} and {cleaned[1]}"
-        return ", ".join(cleaned[:-1]) + f", and {cleaned[-1]}" 
-
-    top_feature_names = [name for name, _, _ in top_features]
-    top_features_text = format_feature_list(top_feature_names)
-    increasing_text = format_feature_list(increasing) if increasing else "no clear overall risk-increasing factors"
-    reducing_text = format_feature_list(reducing) if reducing else "no clear overall risk-reducing factors"
-
-    if top_feature_names:
-        overall_focus_text = format_feature_list(top_feature_names[:4])
-        final_sentence = (
-            f"Overall, these patterns suggest the institution should pay close attention to "
-            f"<b>{overall_focus_text}</b> when identifying students who may need support."
-        )
-    else:
-        final_sentence = (
-            "Overall, these patterns suggest the institution should continue monitoring the main drivers of dropout risk when identifying students who may need support."
-        )
-
-    summary_html = f"""
-The model found that the strongest overall factors related to dropout risk were <b>{top_features_text}</b>.<br><br>
-Factors that tended to increase dropout risk overall included <b>{increasing_text}</b>.<br><br>
-Factors that tended to reduce dropout risk overall included <b>{reducing_text}</b>.<br><br>
-{final_sentence}
-"""
-
-    return summary_html
-
-def render_global_summary_box(summary_html: str):
-    summary_html = re.sub(r"</?div[^>]*>", "", str(summary_html)).strip()
-
-    st.markdown(
-        f"""
-        <div style="
-            padding: 0.9rem 1rem;
-            border-radius: 0.6rem;
-            background: #eff6ff;
-            color: #1e3a8a;
-            border: 1px solid #bfdbfe;
-            margin-top: 0.75rem;
-            margin-bottom: 0.75rem;
-        ">
-            <div style="font-weight: 700; margin-bottom: 0.45rem;">
-                SHAP Explanation - Overall Summary
-            </div>
-            <div style="line-height: 1.6;">
-                {summary_html}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 def train_institution_model(
     df: pd.DataFrame,
@@ -1469,14 +790,7 @@ def train_institution_model(
 
     for idx, name in enumerate(candidate_models, start=1):
         render_training_status(status_placeholder, f"Training models... ({idx}/{len(candidate_models)}) {name}")
-        model, metrics, best_params, cv_best_score = train_single_model(
-            name,
-            X_train_t,
-            X_test_t,
-            y_train,
-            y_test,
-            selection_metric,
-        )
+        model, metrics = train_single_model(name, X_train_t, X_test_t, y_train, y_test)
         trained_models[name] = model
         comparison_rows.append({
             "Model": name,
@@ -1504,51 +818,24 @@ def train_institution_model(
 
     feature_names = get_transformed_feature_names(preprocessor)
 
+    render_training_status(status_placeholder, "Building local SHAP explainer...")
+    X_local_background = X_train_t[: min(200, len(X_train_t))]
+    local_explainer = get_local_probability_explainer(best_model, X_local_background)
+
+    render_training_status(status_placeholder, "Generating global SHAP plots...")
+    X_global_background = X_train_t[: min(200, len(X_train_t))]
+    global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
+
     global_sample_size = min(300, X_train_t.shape[0])
     sample_idx = np.random.RandomState(42).choice(X_train_t.shape[0], size=global_sample_size, replace=False)
     X_shap_sample = X_train_t[sample_idx]
-    shap_sample_pred_probs = best_model.predict_proba(X_shap_sample)[:, 1]
 
-    shap_variance_low = is_low_variance_prediction_array(shap_sample_pred_probs)
-    shap_variance_warning = ""
-    local_explainer = None
-    importance_bytes = None
-    summary_bytes = None
-    global_shap_summary_text = ""
-
-    if shap_variance_low:
-        shap_variance_warning = (
-            "⚠️ The model predictions show very low variation for this dataset. "
-            "This means the model is producing nearly the same prediction for most students, "
-            "so SHAP explanations are not meaningful. Global and individual SHAP plots have been skipped."
-        )
-    else:
-        render_training_status(status_placeholder, "Building local SHAP explainer...")
-        X_local_background = X_train_t[: min(200, len(X_train_t))]
-        local_explainer = get_local_probability_explainer(best_model, X_local_background)
-
-        render_training_status(status_placeholder, "Generating global SHAP plots...")
-        X_global_background = X_train_t[: min(200, len(X_train_t))]
-        global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
-
-        importance_bytes, summary_bytes = build_global_shap_plots_fast(
-            global_explainer,
-            best_model_name,
-            X_shap_sample,
-            feature_names,
-        )
-
-        global_shap_values_obj = global_explainer(X_shap_sample)
-        if hasattr(global_shap_values_obj, "values"):
-            global_shap_values = extract_positive_class_shap_values(global_shap_values_obj)
-        else:
-            global_shap_values = np.array(global_shap_values_obj)
-
-        global_shap_summary_text = generate_global_shap_summary(
-            feature_names,
-            global_shap_values,
-            top_n=5,
-        )
+    importance_bytes, summary_bytes = build_global_shap_plots_fast(
+        global_explainer,
+        best_model_name,
+        X_shap_sample,
+        feature_names,
+    )
 
     render_training_status(status_placeholder, "Finalizing trained model...")
     st.session_state.model = best_model
@@ -1566,9 +853,6 @@ def train_institution_model(
     st.session_state.selected_model_name = best_model_name
     st.session_state.model_comparison_df = comparison_df
     st.session_state.selection_metric = selection_metric
-    st.session_state.global_shap_summary_text = global_shap_summary_text
-    st.session_state.shap_variance_low = shap_variance_low
-    st.session_state.shap_variance_warning = shap_variance_warning
 
     if model_choice == "Run all 4 and choose the best":
         st.session_state.train_success_message = (
@@ -1624,10 +908,6 @@ def format_explain_status(student_id: str, pred_label: str, pred_prob: float) ->
 def explain_student(chosen_id: str):
     if not st.session_state.is_trained:
         raise RuntimeError("Please train the institution model first in Tab 1.")
-    if st.session_state.shap_variance_low or st.session_state.shap_explainer is None:
-        raise RuntimeError(
-            "SHAP explanations are not available because the model predictions show very low variation for this dataset."
-        )
     if st.session_state.predict_df is None:
         raise RuntimeError("Please upload a prediction file and generate predictions first.")
 
@@ -1666,17 +946,22 @@ def explain_student(chosen_id: str):
 # ============================================================
 # UI
 # ============================================================
+st.title("🎓 Student Dropout Predictor with SHAP Explainer")
+st.write(
+    "Upload a CSV file containing student records to train an institution-specific model, "
+    "then generate dropout predictions and SHAP-based explanations."
+)
 
 train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain"])
 
 with train_tab:
     st.subheader("Train Institution Model")
-    col1, gap, col2 = st.columns([1, 0.15, 3])
+    col1, col2 = st.columns([1, 3])
 
     with col1:
         training_file = st.file_uploader(
             "📄 Upload Labeled Training CSV",
-            type=["csv", "xlsx", "xls"],
+            type=["csv", "txt", "xlsx", "xls"],
             key="training_file_uploader",
             on_change=on_training_file_change,
         )
@@ -1685,16 +970,38 @@ with train_tab:
         student_id_column = None
         student_name_column = None
         training_df_preview = None
+        training_file_info = ""
+        selected_training_sheet = None
 
         if training_file is not None:
             try:
-                training_df_preview = read_uploaded_table(training_file)
+                training_file_name = getattr(training_file, "name", "").lower()
+
+                if training_file_name.endswith((".xlsx", ".xls")):
+                    training_sheet_names = get_excel_sheet_names(training_file)
+                    if len(training_sheet_names) > 1:
+                        selected_training_sheet = st.selectbox(
+                            "Choose Excel sheet",
+                            training_sheet_names,
+                            key="training_sheet_selector",
+                        )
+                    elif len(training_sheet_names) == 1:
+                        selected_training_sheet = training_sheet_names[0]
+
+                training_df_preview, training_file_info = read_uploaded_table(
+                    training_file,
+                    sheet_name=selected_training_sheet,
+                )
+
+                if training_file_info:
+                    st.caption(training_file_info)
+
                 if training_df_preview.shape[1] == 1:
-                    st.error(
+                    raise ValueError(
                         "❌ The uploaded file could not be properly processed. "
                         "Please check that it is a valid CSV file with multiple columns."
                     )
-                    st.stop()
+
                 training_df_preview.columns = training_df_preview.columns.str.strip()
                 columns = training_df_preview.columns.tolist()
                 guessed_id, guessed_name = infer_id_and_name_columns(training_df_preview)
@@ -1731,13 +1038,12 @@ with train_tab:
                 model_choice = st.selectbox(
                     "Model Selection",
                     [
-        "Logistic Regression",
-        "XGBoost",
-        "Random Forest",
-        "Neural Network",
-        "Run all 4 and choose the best",
-],
-                    index=0
+                        "XGBoost",
+                        "Random Forest",
+                        "Logistic Regression",
+                        "Neural Network",
+                        "Run all 4 and choose the best",
+                    ],
                 )
 
                 selection_metric = st.selectbox(
@@ -1778,8 +1084,6 @@ with train_tab:
 
         if st.session_state.train_success_message:
             st.success(st.session_state.train_success_message)
-            if st.session_state.global_shap_summary_text:
-                render_global_summary_box(st.session_state.global_shap_summary_text)
 
     with col2:
         st.markdown("### Model Performance Metrics")
@@ -1795,9 +1099,7 @@ with train_tab:
                 st.dataframe(st.session_state.model_comparison_df, width="stretch", hide_index=True)
 
             st.markdown("### Global SHAP Summary")
-            if st.session_state.shap_variance_warning:
-                st.warning(st.session_state.shap_variance_warning)
-            plot_col1, plot_gap, plot_col2 = st.columns([1, 0.12, 1])
+            plot_col1, plot_col2 = st.columns(2)
 
             with plot_col1:
                 render_centered_chart_help(
@@ -1823,15 +1125,11 @@ This chart shows **importance only**, not direction.
 This chart shows how different factors influence dropout risk **across all students**.
 
 - Each dot represents **one student**
-- Features are ordered by **importance (top = most important)**
+- Red dots usually indicate **higher feature values**
+- Blue dots usually indicate **lower feature values**
 
-🔴 **Red dots** → higher feature values  
-🔵 **Blue dots** → lower feature values  
-
-➡️ Dots to the **right** increase dropout risk  
-⬅️ Dots to the **left** reduce dropout risk  
-
-The wider the spread, the stronger the feature's overall impact.
+Dots to the **right** tend to increase dropout risk.  
+Dots to the **left** tend to decrease dropout risk.
 """,
                 )
                 if st.session_state.global_summary_plot_bytes is not None:
@@ -1851,12 +1149,12 @@ with predict_tab:
             st.caption(f"Active model: {st.session_state.selected_model_name}")
 
         st.subheader("Upload & Predict")
-        pred_col1, pred_gap, pred_col2 = st.columns([1, 0.15, 3])
+        pred_col1, pred_col2 = st.columns([1, 3])
 
         with pred_col1:
             prediction_file = st.file_uploader(
                 "📄 Upload new Student CSV File to get predictions",
-                type=["csv", "xlsx", "xls"],
+                type=["csv", "txt", "xlsx", "xls"],
                 key="prediction_file_uploader",
                 on_change=on_prediction_file_change,
             )
@@ -1866,16 +1164,38 @@ with predict_tab:
             prediction_validation_message = ""
             missing_cols = []
             extra_cols = []
+            prediction_file_info = ""
+            selected_prediction_sheet = None
 
             if prediction_file is not None:
                 try:
-                    prediction_df_preview = read_uploaded_table(prediction_file)
+                    prediction_file_name = getattr(prediction_file, "name", "").lower()
+
+                    if prediction_file_name.endswith((".xlsx", ".xls")):
+                        prediction_sheet_names = get_excel_sheet_names(prediction_file)
+                        if len(prediction_sheet_names) > 1:
+                            selected_prediction_sheet = st.selectbox(
+                                "Choose Excel sheet",
+                                prediction_sheet_names,
+                                key="prediction_sheet_selector",
+                            )
+                        elif len(prediction_sheet_names) == 1:
+                            selected_prediction_sheet = prediction_sheet_names[0]
+
+                    prediction_df_preview, prediction_file_info = read_uploaded_table(
+                        prediction_file,
+                        sheet_name=selected_prediction_sheet,
+                    )
+
+                    if prediction_file_info:
+                        st.caption(prediction_file_info)
+
                     if prediction_df_preview.shape[1] == 1:
-                        st.error(
+                        raise ValueError(
                             "❌ The uploaded file could not be properly processed. "
                             "Please check that it is a valid CSV file with multiple columns."
                         )
-                        st.stop()
+
                     prediction_df_preview.columns = prediction_df_preview.columns.str.strip()
                     prediction_file_is_valid, prediction_validation_message, missing_cols, extra_cols = (
                         validate_prediction_columns(prediction_df_preview)
@@ -1948,16 +1268,13 @@ with predict_tab:
                 preview_cols += ["Dropout Probability", "Prediction"]
 
                 preview_df = st.session_state.predict_df[preview_cols].copy() if preview_cols else st.session_state.predict_df.copy()
-                display_df = preview_df.reset_index(drop=True).copy()
-                display_df.index = display_df.index + 1
-                display_df.index.name = "No."
-                st.dataframe(display_df, width="stretch", height=280)
+                st.dataframe(preview_df, width="stretch", height=280)
             else:
                 st.info("Prediction results will appear here after you upload a file and submit it for predictions.")
 
         st.markdown("---")
         st.subheader("SHAP Explanation for a Specific Student")
-        shap_col1, shap_gap, shap_col2 = st.columns([1, 0.15, 3])
+        shap_col1, shap_col2 = st.columns([1, 3])
 
         with shap_col1:
             student_choices = get_student_id_choices_from_predictions()
@@ -1973,16 +1290,13 @@ with predict_tab:
             else:
                 selected_student_id = st.text_input("Student ID", placeholder="e.g., A10001")
 
-            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True, disabled=st.session_state.shap_variance_low)
+            explain_clicked = st.button("🔎 Explain Prediction", use_container_width=True)
             clear_shap_clicked = st.button("Clear SHAP Section", use_container_width=True)
 
             if clear_shap_clicked:
                 st.session_state.latest_explanation = None
                 st.session_state.latest_plot_bytes = None
                 st.session_state.explain_status = ""
-
-            if st.session_state.shap_variance_warning:
-                st.warning(st.session_state.shap_variance_warning)
 
             if explain_clicked:
                 try:
@@ -2017,52 +1331,16 @@ with predict_tab:
                 else:
                     st.error(st.session_state.explain_status)
 
-            if (
-                st.session_state.latest_explanation is not None
-                and st.session_state.predict_df is not None
-                and selected_student_id
-                and st.session_state.explain_status.startswith("✅")
-            ):
-                student_id_col = st.session_state.student_id_column
-                row = st.session_state.predict_df[
-                    st.session_state.predict_df[student_id_col].astype(str) == str(selected_student_id)
-                ].iloc[0]
-
-                pred_label = row["Prediction"]
-                pred_prob = format_probability(row["Dropout Probability Value"])
-
-                summary_html = generate_plain_language_shap_summary(
-                    st.session_state.latest_explanation,
-                    pred_label,
-                    pred_prob,
-                )
-                render_summary_box(selected_student_id, summary_html)
-
-                recommendations = generate_shap_recommendations(
-                    st.session_state.latest_explanation,
-                    row["Prediction"] if "Prediction" in row.index else "Unknown",
-                    row["Dropout Probability Value"] if "Dropout Probability Value" in row.index else np.nan,
-                    row,
-                )
-                render_recommendation_box(selected_student_id, recommendations)
-
         with shap_col2:
             render_centered_chart_help(
                 "Individual SHAP Waterfall Plot",
                 """
-This chart explains **why this specific student received their prediction**.
+This plot explains **why this specific student** was predicted as Dropout or No Dropout.
 
-- The starting point is the **average dropout risk** indicated by **E[f(x)]**
-- Each feature pushes the dropout risk **higher or lower**
-
-🔴 **Red bars** → increase dropout risk  
-🔵 **Blue bars** → decrease dropout risk  
-
-➡️ Bars pushing to the **right** increase risk  
-⬅️ Bars pushing to the **left** reduce risk  
-
-- Longer bars mean a **stronger influence** on the prediction  
-- The final dropout risk indicated by **f(x)** is based on the combined effect of all displayed factors
+- Bars pushing to the **right** increase dropout risk
+- Bars pushing to the **left** decrease dropout risk
+- Larger bars mean a **stronger effect**
+- The final prediction is based on the combined effect of all displayed factors
 """,
                 heading_level=3,
             )
