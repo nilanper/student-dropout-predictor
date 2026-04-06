@@ -110,7 +110,7 @@ GUIDE_DIR = BASE_DIR / "assets" / "user_guide"
 def show_guide_image(filename: str, caption: str):
     image_path = GUIDE_DIR / filename
     if image_path.exists():
-        st.image(str(image_path), caption=caption, width=500)
+        st.image(str(image_path), caption=caption, width=650)
     else:
         st.caption(f"Screenshot not available: {caption}")
 
@@ -566,7 +566,7 @@ def format_probability(prob: float) -> str:
 
 
 
-def render_training_status(placeholder, message: str):
+def render_training_status(training_status_placeholder, placeholder, message: str.split(",")[1].strip()):
     placeholder.markdown(
         f"""
         <div class="training-banner">
@@ -1535,7 +1535,7 @@ def train_institution_model(
     if X.shape[1] == 0:
         raise ValueError("No usable feature columns found after removing target / ID / name columns.")
 
-    render_training_status(status_placeholder, "Preparing training data...")
+    render_training_status(training_status_placeholder, status_placeholder, "Preparing training data...".split(",")[1].strip())
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -1554,12 +1554,12 @@ def train_institution_model(
         else [model_choice]
     )
 
-    render_training_status(status_placeholder, "Training models...")
+    render_training_status(training_status_placeholder, status_placeholder, "Training models...".split(",")[1].strip())
     comparison_rows = []
     trained_models = {}
 
     for idx, name in enumerate(candidate_models, start=1):
-        render_training_status(status_placeholder, f"Training models... ({idx}/{len(candidate_models)}) {name}")
+        render_training_status(training_status_placeholder, status_placeholder, f"Training models... ({idx}/{len(candidate_models.split(",")[1].strip())}) {name}")
         model, metrics, best_params, cv_best_score = train_single_model(
             name,
             X_train_t,
@@ -1580,7 +1580,7 @@ def train_institution_model(
 
     comparison_df = pd.DataFrame(comparison_rows)
 
-    render_training_status(status_placeholder, "Selecting best model...")
+    render_training_status(training_status_placeholder, status_placeholder, "Selecting best model...".split(",")[1].strip())
     best_model_name = choose_best_model(comparison_df, selection_metric) if model_choice == "Run all 4 and choose the best" else model_choice
     best_model = trained_models[best_model_name]
 
@@ -1614,11 +1614,11 @@ def train_institution_model(
             "so SHAP explanations are not meaningful. Global and individual SHAP plots have been skipped."
         )
     else:
-        render_training_status(status_placeholder, "Building local SHAP explainer...")
+        render_training_status(training_status_placeholder, status_placeholder, "Building local SHAP explainer...".split(",")[1].strip())
         X_local_background = X_train_t[: min(200, len(X_train_t))]
         local_explainer = get_local_probability_explainer(best_model, X_local_background)
 
-        render_training_status(status_placeholder, "Generating global SHAP plots...")
+        render_training_status(training_status_placeholder, status_placeholder, "Generating global SHAP plots...".split(",")[1].strip())
         X_global_background = X_train_t[: min(200, len(X_train_t))]
         global_explainer = get_fast_global_explainer(best_model, best_model_name, X_global_background)
 
@@ -1641,7 +1641,7 @@ def train_institution_model(
             top_n=5,
         )
 
-    render_training_status(status_placeholder, "Finalizing trained model...")
+    render_training_status(training_status_placeholder, status_placeholder, "Finalizing trained model...".split(",")[1].strip())
     st.session_state.model = best_model
     st.session_state.preprocessor = preprocessor
     st.session_state.feature_columns = X.columns.tolist()
@@ -1855,14 +1855,15 @@ with train_tab:
 
                 if model_choice == "Run all 4 and choose the best":
                     selection_metric = st.selectbox(
-                        "Best Model Selection Metric",
+                        "Metric to select the Best Model",
                         ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
                         index=0,
                     )
                 else:
                     selection_metric = "F1 Score"
 
-                train_button = st.button("🚀 Train Model", use_container_width=True)
+                train_button = training_status_placeholder = st.empty()
+    st.button("🚀 Train Model", use_container_width=True)
                 training_status_placeholder = st.empty()
 
                 if train_button:
