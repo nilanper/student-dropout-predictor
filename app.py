@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import warnings
+from pathlib import Path
 from math import prod
 from typing import List, Tuple
 
@@ -100,6 +101,19 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+
+BASE_DIR = Path(__file__).parent
+GUIDE_DIR = BASE_DIR / "assets" / "user_guide"
+
+def show_guide_image(filename: str, caption: str):
+    image_path = GUIDE_DIR / filename
+    if image_path.exists():
+        st.image(str(image_path), caption=caption, use_container_width=True)
+    else:
+        st.caption(f"Screenshot not available: {caption}")
+
 
 
 # ============================================================
@@ -1116,7 +1130,7 @@ def build_global_shap_plots_fast(explainer, model_name: str, X_sample: np.ndarra
 
 
 
-def build_shap_figure(explanation, max_display: int = 8):
+def build_shap_figure(explanation, max_display: int = 12):
     plt.close("all")
     shap.plots.waterfall(explanation, max_display=max_display, show=False)
     fig = plt.gcf()
@@ -1125,12 +1139,12 @@ def build_shap_figure(explanation, max_display: int = 8):
     labels = [str(t.get_text()) for t in ax.get_yticklabels() if t.get_text()]
     max_len = max((len(x) for x in labels), default=25)
 
-    fig_width = min(max(13, 9 + max_len * 0.08), 17)
-    fig_height = min(max(5.8, 0.50 * max_display + 2.0), 7.8)
+    fig_width = min(max(13, 9 + max_len * 0.08), 18)
+    fig_height = min(max(7.5, 0.55 * max_display + 2.5), 11.0)
     fig.set_size_inches(fig_width, fig_height)
 
     left_margin = min(max(0.30, max_len * 0.008), 0.50)
-    fig.subplots_adjust(left=left_margin, right=0.96, top=0.90, bottom=0.18)
+    fig.subplots_adjust(left=left_margin, right=0.97, top=0.93, bottom=0.16)
 
     ax.tick_params(axis="y", labelsize=10)
     ax.tick_params(axis="x", labelsize=10)
@@ -1728,7 +1742,7 @@ def explain_student(chosen_id: str):
         get_transformed_feature_names(st.session_state.preprocessor),
     )
 
-    fig = build_shap_figure(explanation, max_display=8)
+    fig = build_shap_figure(explanation, max_display=12)
     plot_bytes = figure_to_png_bytes(fig)
     plt.close(fig)
 
@@ -1744,7 +1758,7 @@ def explain_student(chosen_id: str):
 # UI
 # ============================================================
 
-train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain"])
+train_tab, predict_tab, guide_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain", "📘 User Guide"])
 
 with train_tab:
     st.subheader("Train Institution Model")
@@ -1839,11 +1853,14 @@ with train_tab:
                     index=0
                 )
 
-                selection_metric = st.selectbox(
-                    "Best Model Selection Metric",
-                    ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
-                    index=0,
-                )
+                if model_choice == "Run all 4 and choose the best":
+                    selection_metric = st.selectbox(
+                        "Best Model Selection Metric",
+                        ["F1 Score", "ROC AUC", "Accuracy", "Recall", "Precision"],
+                        index=0,
+                    )
+                else:
+                    selection_metric = "F1 Score"
 
                 train_button = st.button("🚀 Train Model", use_container_width=True)
                 training_status_placeholder = st.empty()
@@ -2194,3 +2211,151 @@ The final prediction f(x) is reached by combining all these effects from the bas
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
+
+
+
+with guide_tab:
+    st.header("📘 User Guide")
+
+    with st.expander("1️⃣ Overview of the System", expanded=True):
+        st.markdown("""
+This system is designed for individual educational institutions to:
+
+- Train machine learning models using their **historical student data**
+- Predict **dropout risk of current students**
+- Understand **why students are at risk** using SHAP explanations
+
+Each institution builds its own customized model, making predictions specific to its own data.
+""")
+
+    with st.expander("2️⃣ Data Requirements & File Support"):
+        st.markdown("""
+**Supported file formats**
+- CSV (`.csv`)
+- Text (`.txt`)
+- Excel (`.xlsx`, `.xls`)
+
+**Excel files**
+- If multiple sheets are available, select the correct sheet before proceeding.
+
+**Delimiter detection**
+- For CSV/TXT files, the app automatically detects the delimiter and displays it.
+
+**Flexible data shape**
+- The system supports dataframes of any shape, with any number of rows and columns.
+""")
+
+    with st.expander("3️⃣ Important Rule for Prediction Files"):
+        st.markdown("""
+The prediction file must match the training file structure exactly for the model to make meaningful predictions.
+
+That means:
+- Same column names
+- No missing columns
+- No extra columns
+
+If not, the app will show an **Upload file incompatibility** message. Correct the file and re-upload it.
+""")
+
+    with st.expander("4️⃣ Application Structure"):
+        st.markdown("""
+**Tab 1 – Train Institution Model**
+- Upload historical training data
+- Configure model settings
+- Train a model
+- Review model performance and global SHAP insights
+
+**Tab 2 – Predict + Explain**
+- Upload current student data
+- Generate predictions
+- Review prediction results
+- Generate individual SHAP explanations and recommendations
+""")
+
+    with st.expander("5️⃣ Step-by-Step: Training a Model"):
+        st.markdown("### Step 1: Upload Training Data")
+        st.markdown("Use **Upload Labeled Training Data File** to upload the historical student dataset.")
+
+        show_guide_image("Tab1_before_training.png", "Training Setup (Before Training)")
+
+        st.markdown("### Step 2: Select Target Column")
+        st.markdown("Choose the column indicating dropout in the **Target Column**.")
+
+        st.markdown("### Step 3: Select Student Identifiers")
+        st.markdown("Select **Student ID Column** and **Student Name Column** if available.")
+
+        st.markdown("### Step 4: Calibrate Test Split Proportion")
+        st.markdown("Use the **Test Split Proportion** slider to decide how much data is used for testing. The default 0.20 means 20% test data and 80% training data.")
+
+        st.markdown("### Step 5: Choose the Model")
+        st.markdown("Use **Model Selection** to choose a single model or **Run all 4 and choose the best**.")
+
+        st.markdown("### Step 6: Select Best-Model Metric (Conditional)")
+        st.markdown("If you choose **Run all 4 and choose the best**, use **Metric to Select the Best Model** to decide how the best model is selected.")
+
+        st.markdown("### Step 7: Train the Model")
+        st.markdown("Click **🚀 Train Model**. The training status message appears above the button while the model is training.")
+
+        st.markdown("### Step 8: View Results")
+        st.markdown("""
+After training, review:
+- Model performance metrics
+- Model comparison
+- Global SHAP summary
+""")
+
+        show_guide_image("Tab1_after_model_training.png", "Training Results & Global SHAP Summary")
+
+    with st.expander("6️⃣ Step-by-Step: Making Predictions"):
+        st.markdown("### Step 1: Upload Prediction File")
+        st.markdown("Use **Upload new Student Data File to get predictions** to upload the current student dataset.")
+
+        st.markdown("### Step 2: File Compatibility Validation")
+        st.markdown("The app checks whether the uploaded student file matches the training file structure. If there is an incompatibility, correct the columns and re-upload the file.")
+
+        show_guide_image("Tab2_before_file_submission.png", "Before Prediction File Submission")
+
+        st.markdown("### Step 3: Generate Predictions")
+        st.markdown("Click **Submit File for Predictions** to generate dropout predictions.")
+
+        st.markdown("### Step 4: View Results")
+        st.markdown("Review the generated **Prediction Results** table, including Student ID, Student Name, Dropout Probability, and Prediction.")
+
+        show_guide_image("Tab2_after_file_submission.png", "Prediction Results")
+
+    with st.expander("7️⃣ SHAP Explanation & Interpretation"):
+        st.markdown("### Step 1: Select Student")
+        st.markdown("Use **Select Student ID** to choose the student you want to explain.")
+
+        show_guide_image("Tab2_SHAPsection_before_Prediction.png", "Before SHAP Explanation")
+
+        st.markdown("### Step 2: Generate Explanation")
+        st.markdown("Click **Explain Prediction** to generate the SHAP explanation for the selected student.")
+
+        show_guide_image("Tab2_SHAPsection_after_Prediction.png", "SHAP Explanation Result")
+
+        st.markdown("### How to Read the Waterfall Plot")
+        st.markdown("""
+- The prediction starts from the baseline **E[f(x)]** and moves step-by-step to the final prediction **f(x)**.
+- Bars pushing to the right increase dropout risk.
+- Bars pushing to the left decrease dropout risk.
+- Red bars indicate factors increasing dropout risk.
+- Blue bars indicate factors reducing dropout risk.
+- Larger bars mean a stronger effect.
+""")
+
+    with st.expander("8️⃣ Common Issues & Fixes"):
+        st.markdown("""
+- **Upload file incompatibility**: Make sure the prediction file has the exact same columns as the training file.
+- **Excel sheet issues**: Select the correct sheet before proceeding.
+- **Delimiter issues**: Check the detected delimiter shown below the uploader.
+""")
+
+    with st.expander("9️⃣ Best Practices"):
+        st.markdown("""
+- Use clean, structured historical data
+- Make sure the target column is binary
+- Keep prediction files consistent with training files
+- Review SHAP explanations and recommendations before making interventions
+""")
+
