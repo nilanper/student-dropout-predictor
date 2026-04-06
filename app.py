@@ -952,7 +952,7 @@ st.write(
     "then generate dropout predictions and SHAP-based explanations."
 )
 
-train_tab, predict_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain"])
+train_tab, predict_tab, guide_tab = st.tabs(["🏫 Train Institution Model", "📊 Predict + Explain", "📘 User Guide"])
 
 with train_tab:
     st.subheader("Train Institution Model")
@@ -1353,3 +1353,119 @@ This plot explains **why this specific student** was predicted as Dropout or No 
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.info("The SHAP waterfall plot will appear here after you generate an explanation.")
+
+
+
+with guide_tab:
+    st.subheader("📘 User Guide")
+
+    with st.expander("1️⃣ Overview of the System", expanded=True):
+        st.markdown("""
+This system can be used by individual educational institutions to train their own models using historical student data and make predictions for current students using current student data.
+
+The system supports dataframes of any shape and supports CSV, text, and Excel file uploads. For Excel files with multiple sheets, the user must select the correct sheet. For CSV/TXT files, the app automatically detects and displays the delimiter.
+
+For the model to make meaningful predictions, the prediction file’s columns must exactly match the model training file.
+""")
+
+    with st.expander("2️⃣ What the First Two Tabs Are For"):
+        st.markdown("""
+**🏫 Train Institution Model**
+- Upload historical student data
+- Configure target, identifiers, test split, and model settings
+- Train the model
+- View model metrics and global SHAP outputs
+
+**📊 Predict + Explain**
+- Upload current student data
+- Validate file compatibility
+- Generate predictions
+- Explain an individual student's prediction using SHAP
+""")
+
+    with st.expander("3️⃣ Step-by-Step: Training a Model"):
+        st.markdown("### Step 1: Upload Training Data")
+        st.markdown("Use **📄 Upload Labeled Training Data File** to upload the historical dataset.")
+
+        show_guide_image("Tab1_before_training.png", "Training Setup (Before Training)")
+
+        st.markdown("### Step 2: Select Target Column")
+        st.markdown("Choose the column indicating dropout in the **Target Column**.")
+
+        st.markdown("### Step 3: Select Student Identifier Columns")
+        st.markdown("Use **Student ID Column** and **Student Name Column** if available.")
+
+        st.markdown("### Step 4: Calibrate Test Split Proportion")
+        st.markdown("Use the **Test Split Proportion** slider to control how much data is reserved for testing versus training.")
+
+        st.markdown("### Step 5: Choose the Model")
+        st.markdown("Use **Model Selection** to select one model or **Run all 4 and choose the best**.")
+
+        st.markdown("### Step 6: Select the Best-Model Metric (Conditional)")
+        st.markdown("If you choose **Run all 4 and choose the best**, use **Metric to select the Best Model**.")
+
+        st.markdown("### Step 7: Train Model")
+        st.markdown("Click **🚀 Train Model**. The training status message appears above the button while training is running.")
+
+        st.markdown("### Step 8: View Results")
+        st.markdown("""
+After training, review:
+- Model performance metrics
+- Model comparison
+- Global SHAP summary
+""")
+
+        show_guide_image("Tab1_after_model_training.png", "Training Results & Global SHAP Summary")
+
+    with st.expander("4️⃣ Step-by-Step: Making Predictions"):
+        st.markdown("### Step 1: Upload Prediction File")
+        st.markdown("Use **📄 Upload new Student Data File to get predictions** to upload the current student file.")
+
+        st.markdown("### Step 2: Validate Student File Compatibility")
+        st.markdown("The app checks whether the uploaded student file matches the training file structure. If it does not, correct the file and re-upload it.")
+
+        show_guide_image("Tab2_before_file_submission.png", "Before Prediction File Submission")
+
+        st.markdown("### Step 3: Generate Predictions")
+        st.markdown("Click **Submit File for Predictions** to generate predictions.")
+
+        st.markdown("### Step 4: View Results")
+        st.markdown("Review the generated prediction table including Student ID, Student Name, Dropout Probability, and Prediction.")
+
+        show_guide_image("Tab2_after_file_submission.png", "Prediction Results")
+
+    with st.expander("5️⃣ SHAP Explanation & Interpretation"):
+        st.markdown("### Step 1: Select Student")
+        st.markdown("Choose a student from the **Select Student ID** dropdown.")
+
+        show_guide_image("Tab2_SHAPsection_before_Prediction.png", "Before SHAP Explanation")
+
+        st.markdown("### Step 2: Generate Explanation")
+        st.markdown("Click **Explain Prediction** to generate the individual SHAP explanation.")
+
+        show_guide_image("Tab2_SHAPsection_after_Prediction.png", "SHAP Explanation Result")
+
+        st.markdown("### How to Read the Waterfall Plot")
+        st.markdown("""
+This plot explains why this specific student was predicted as Dropout or No Dropout.
+
+The prediction starts from the baseline **E[f(x)]** and moves step-by-step to the final prediction **f(x)** based on contributing factors.
+
+- Bars pushing to the right increase dropout risk
+- Bars pushing to the left decrease dropout risk
+- Red bars indicate factors increasing dropout risk
+- Blue bars indicate factors reducing dropout risk
+- Larger bars mean a stronger effect
+""")
+
+    with st.expander("6️⃣ Validation and Re-uploading Files"):
+        st.markdown("""
+If the uploaded prediction file is not compatible, the app will show a validation message such as **Upload file incompatibility**.
+
+To correct this:
+1. Compare the prediction file columns with the training file columns
+2. Remove extra columns
+3. Add any missing columns
+4. Re-upload the corrected file
+""")
+
